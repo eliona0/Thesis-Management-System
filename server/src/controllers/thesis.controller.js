@@ -499,6 +499,60 @@ const deleteVersion = async (req, res) => {
   }
 };
 
+const approveFinalVersion = async (req, res) => {
+  try {
+    const mentorUserId = req.user.userId;
+    const versionId = Number(req.params.versionId);
+
+const result = await thesisService.approveFinalThesisVersion({
+  mentorUserId,
+  versionId,
+});
+
+    return res.status(200).json({
+      success: true,
+      message: "Final thesis version approved successfully",
+      version: result.version,
+      thesis: result.thesis,
+    });
+  } catch (error) {
+    console.error("Approve final version error:", error);
+
+    if (error.message === "VERSION_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "Thesis version not found",
+      });
+    }
+
+    if (error.message === "UNAUTHORIZED_VERSION") {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to approve this thesis version",
+      });
+    }
+
+    if (error.message === "THESIS_NOT_IN_PROGRESS") {
+      return res.status(400).json({
+        success: false,
+        message: "Thesis is not currently in progress",
+      });
+    }
+
+    if (error.message === "VERSION_NOT_REVIEWED") {
+      return res.status(400).json({
+        success: false,
+        message: "Only reviewed thesis versions can be approved",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+    });
+  }
+};
+
 module.exports = {
   getMyThesis,
   updateMyThesis,
@@ -510,4 +564,5 @@ module.exports = {
   getMentorThesisVersions,
   submitVersion,
   deleteVersion,
+  approveFinalVersion,
 };

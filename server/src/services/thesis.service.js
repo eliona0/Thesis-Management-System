@@ -555,6 +555,70 @@ const submitThesisVersion = async ({
 };
 
 
+const approveFinalThesisVersion = async ({
+  mentorUserId,
+  versionId,
+}) => {
+  const version = await prisma.thesisVersion.findUnique({
+    where: {
+      id: versionId,
+    },
+    include: {
+      thesis: true,
+    },
+  });
+
+  if (!version) {
+    throw new Error("VERSION_NOT_FOUND");
+  }
+
+  // Kontrollo që ky mentor është mentori i kësaj teme
+  if (version.thesis.mentorId !== mentorUserId) {
+    throw new Error("UNAUTHORIZED_VERSION");
+  }
+
+  // Thesis duhet të jetë ende në proces
+  if (version.thesis.status !== "IN_PROGRESS") {
+    throw new Error("THESIS_NOT_IN_PROGRESS");
+  }
+
+  // Vetëm versioni që është REVIEWED mund të aprovohet finalisht
+  if (version.status !== "REVIEWED") {
+    throw new Error("VERSION_NOT_REVIEWED");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Versioni bëhet final
+    const approvedVersion = await tx.thesisVersion.update({
+      where: {
+        id: versionId,
+      },
+      data: {
+        status: "APPROVED",
+        isCurrent: true,
+      },
+    });
+
+    // Thesis kalon në fazën e dorëzimit final
+    const updatedThesis = await tx.thesis.update({
+      where: {
+        id: version.thesisId,
+      },
+      data: {
+        status: "SUBMITTED",
+      },
+    });
+
+    return {
+      version: approvedVersion,
+      thesis: updatedThesis,
+    };
+  });
+
+  return result;
+};
+
+
 module.exports = {
   getStudentThesis,
   updateStudentThesis,
@@ -566,4 +630,5 @@ module.exports = {
   getMentorThesisVersions,
   submitThesisVersion,
   deleteThesisVersion,
+  approveFinalThesisVersion,
 };

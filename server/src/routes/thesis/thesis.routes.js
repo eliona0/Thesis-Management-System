@@ -11,6 +11,7 @@ const {
   getMentorThesisVersions,
   submitVersion,
   deleteVersion,
+  approveFinalVersion,
 } = require("../../controllers/thesis.controller");
 
 const { authenticate } = require("../../middleware/auth.middleware");
@@ -95,6 +96,13 @@ router.delete(
   authenticate,
   requireRole("STUDENT"),
   deleteVersion
+);
+
+router.patch(
+  "/versions/:versionId/approve-final",
+  authenticate,
+  requireRole("MENTOR"),
+  approveFinalVersion
 );
 
 module.exports = router;
