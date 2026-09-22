@@ -9,6 +9,8 @@ const {
   createVersion,
   getMyThesisVersions,
   getMentorThesisVersions,
+  submitVersion,
+  deleteVersion,
 } = require("../../controllers/thesis.controller");
 
 const { authenticate } = require("../../middleware/auth.middleware");
@@ -79,6 +81,20 @@ router.get(
   authenticate,
   requireRole("MENTOR"),
   getMentorThesisVersions
+);
+
+router.patch(
+  "/my-thesis/versions/:versionId/submit",
+  authenticate,
+  requireRole("STUDENT"),
+  submitVersion
+);
+
+router.delete(
+  "/my-thesis/versions/:versionId",
+  authenticate,
+  requireRole("STUDENT"),
+  deleteVersion
 );
 
 module.exports = router;

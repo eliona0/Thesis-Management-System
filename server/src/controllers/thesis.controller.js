@@ -284,6 +284,14 @@ const createVersion = async (req, res) => {
       });
     }
 
+    if (error.message === "ACTIVE_VERSION_EXISTS") {
+  return res.status(400).json({
+    success: false,
+    message:
+      "You must finish the current thesis version before uploading another one",
+  });
+}
+
     if (error.message === "ONLY_PDF_FILES_ALLOWED") {
       return res.status(400).json({
         success: false,
@@ -378,6 +386,119 @@ const getMentorThesisVersions = async (req, res) => {
   }
 };
 
+
+const submitVersion = async (req, res) => {
+  try {
+    const studentId = req.user.userId;
+    const versionId = Number(req.params.versionId);
+
+    const version = await thesisService.submitThesisVersion({
+      studentId,
+      versionId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Thesis version submitted for review",
+      version,
+    });
+  } catch (error) {
+    console.error("Submit thesis version error:", error);
+
+    if (error.message === "THESIS_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "Thesis not found",
+      });
+    }
+
+    if (error.message === "THESIS_NOT_IN_PROGRESS") {
+      return res.status(400).json({
+        success: false,
+        message: "Thesis must be in progress",
+      });
+    }
+
+    if (error.message === "VERSION_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "Thesis version not found",
+      });
+    }
+
+    if (error.message === "UNAUTHORIZED_VERSION") {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot submit this thesis version",
+      });
+    }
+
+    if (error.message === "VERSION_NOT_DRAFT") {
+      return res.status(400).json({
+        success: false,
+        message: "Only draft versions can be submitted for review",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+    });
+  }
+};
+
+const deleteVersion = async (req, res) => {
+  try {
+    const studentId = req.user.userId;
+    const versionId = Number(req.params.versionId);
+
+    const result = await thesisService.deleteThesisVersion({
+      studentId,
+      versionId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    console.error("Delete thesis version error:", error);
+
+    if (error.message === "THESIS_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "Thesis not found",
+      });
+    }
+
+    if (error.message === "VERSION_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "Thesis version not found",
+      });
+    }
+
+    if (error.message === "UNAUTHORIZED_VERSION") {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot delete this thesis version",
+      });
+    }
+
+    if (error.message === "VERSION_CANNOT_BE_DELETED") {
+      return res.status(400).json({
+        success: false,
+        message: "Only draft versions can be deleted",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+    });
+  }
+};
+
 module.exports = {
   getMyThesis,
   updateMyThesis,
@@ -387,4 +508,6 @@ module.exports = {
     createVersion,
   getMyThesisVersions,
   getMentorThesisVersions,
+  submitVersion,
+  deleteVersion,
 };
