@@ -372,18 +372,58 @@ const deleteThesisVersion = async ({
     path.basename(version.filePath)
   );
 
+  // Fshij file-in fizik
   if (fs.existsSync(physicalFilePath)) {
     fs.unlinkSync(physicalFilePath);
   }
 
-  await prisma.thesisVersion.delete({
-    where: { id: versionId },
+  // Rregullo isCurrent pas fshirjes
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Fshije versionin
+    await tx.thesisVersion.delete({
+      where: { id: versionId },
+    });
+
+    // 2. Hiqe isCurrent nga çdo version tjetër
+    await tx.thesisVersion.updateMany({
+      where: {
+        thesisId: thesis.id,
+        isCurrent: true,
+      },
+      data: {
+        isCurrent: false,
+      },
+    });
+
+    // 3. Gjeje versionin e fundit që ka mbetur
+    const previousVersion = await tx.thesisVersion.findFirst({
+      where: {
+        thesisId: thesis.id,
+      },
+      orderBy: {
+        versionNumber: "desc",
+      },
+    });
+
+    // 4. Bëje atë version current
+    if (previousVersion) {
+      await tx.thesisVersion.update({
+        where: {
+          id: previousVersion.id,
+        },
+        data: {
+          isCurrent: true,
+        },
+      });
+    }
+
+    return {
+      id: versionId,
+      message: "Draft version deleted successfully",
+    };
   });
 
-  return {
-    id: versionId,
-    message: "Draft version deleted successfully",
-  };
+  return result;
 };
 
 const getStudentThesisVersions = async (studentId) => {
