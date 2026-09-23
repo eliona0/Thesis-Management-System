@@ -12,6 +12,7 @@ const {
   submitVersion,
   deleteVersion,
   approveFinalVersion,
+  getFinalApprovalStatus,
 } = require("../../controllers/thesis.controller");
 
 const { authenticate } = require("../../middleware/auth.middleware");
@@ -103,6 +104,13 @@ router.patch(
   authenticate,
   requireRole("MENTOR"),
   approveFinalVersion
+);
+
+router.get(
+  "/versions/:versionId/final-approval-status",
+  authenticate,
+  requireRole("MENTOR"),
+  getFinalApprovalStatus
 );
 
 module.exports = router;

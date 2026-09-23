@@ -225,6 +225,7 @@ const startThesis = async ({ mentorUserId, thesisId }) => {
     },
     data: {
       status: "IN_PROGRESS",
+      startedAt: new Date(),
     },
     include: {
       student: {
@@ -582,9 +583,33 @@ const approveFinalThesisVersion = async ({
     throw new Error("THESIS_NOT_IN_PROGRESS");
   }
 
-  // Vetëm versioni që është REVIEWED mund të aprovohet finalisht
+  // Vetëm versioni REVIEWED mund të aprovohet finalisht
   if (version.status !== "REVIEWED") {
     throw new Error("VERSION_NOT_REVIEWED");
+  }
+
+  // Kontrollo nëse tema e ka startedAt
+  if (!version.thesis.startedAt) {
+    throw new Error("THESIS_START_DATE_NOT_FOUND");
+  }
+
+  // Minimumi 3 muaj nga fillimi zyrtar i temës
+  const earliestFinalSubmissionDate = new Date(
+    version.thesis.startedAt
+  );
+
+  earliestFinalSubmissionDate.setMonth(
+    earliestFinalSubmissionDate.getMonth() + 3
+  );
+
+  // Nëse 3 muajt nuk kanë kaluar ende
+  if (new Date() < earliestFinalSubmissionDate) {
+    const error = new Error("MINIMUM_DURATION_NOT_COMPLETED");
+
+    error.earliestFinalSubmissionDate =
+      earliestFinalSubmissionDate;
+
+    throw error;
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -618,6 +643,61 @@ const approveFinalThesisVersion = async ({
   return result;
 };
 
+const getFinalApprovalStatus = async ({
+  mentorUserId,
+  versionId,
+}) => {
+  const version = await prisma.thesisVersion.findUnique({
+    where: {
+      id: versionId,
+    },
+    include: {
+      thesis: true,
+    },
+  });
+
+  if (!version) {
+    throw new Error("VERSION_NOT_FOUND");
+  }
+
+  if (version.thesis.mentorId !== mentorUserId) {
+    throw new Error("UNAUTHORIZED_VERSION");
+  }
+
+  if (!version.thesis.startedAt) {
+    throw new Error("THESIS_START_DATE_NOT_FOUND");
+  }
+
+  const earliestFinalSubmissionDate = new Date(
+    version.thesis.startedAt
+  );
+
+  earliestFinalSubmissionDate.setMonth(
+    earliestFinalSubmissionDate.getMonth() + 3
+  );
+
+  const now = new Date();
+
+  const durationCompleted =
+    now >= earliestFinalSubmissionDate;
+
+  return {
+    available:
+      version.status === "REVIEWED" &&
+      version.thesis.status === "IN_PROGRESS" &&
+      durationCompleted,
+
+    versionStatus: version.status,
+
+    thesisStatus: version.thesis.status,
+
+    startedAt: version.thesis.startedAt,
+
+    earliestFinalSubmissionDate,
+
+    durationCompleted,
+  };
+};
 
 module.exports = {
   getStudentThesis,
@@ -631,4 +711,5 @@ module.exports = {
   submitThesisVersion,
   deleteThesisVersion,
   approveFinalThesisVersion,
+  getFinalApprovalStatus,
 };

@@ -546,6 +546,69 @@ const result = await thesisService.approveFinalThesisVersion({
       });
     }
 
+    if (error.message === "MINIMUM_DURATION_NOT_COMPLETED") {
+  return res.status(400).json({
+    success: false,
+    code: "MINIMUM_DURATION_NOT_COMPLETED",
+    message:
+      "Minimum thesis duration has not yet been completed.",
+    earliestFinalSubmissionDate:
+      error.earliestFinalSubmissionDate,
+  });
+}
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+    });
+  }
+};
+
+const getFinalApprovalStatus = async (req, res) => {
+  try {
+    const mentorUserId = req.user.userId;
+    const versionId = Number(req.params.versionId);
+
+    if (Number.isNaN(versionId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid version ID",
+      });
+    }
+
+    const status = await thesisService.getFinalApprovalStatus({
+      mentorUserId,
+      versionId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      ...status,
+    });
+  } catch (error) {
+    console.error("Get final approval status error:", error);
+
+    if (error.message === "VERSION_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "Thesis version not found",
+      });
+    }
+
+    if (error.message === "UNAUTHORIZED_VERSION") {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view this version",
+      });
+    }
+
+    if (error.message === "THESIS_START_DATE_NOT_FOUND") {
+      return res.status(400).json({
+        success: false,
+        message: "Thesis start date is not available",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Something went wrong",
@@ -565,4 +628,5 @@ module.exports = {
   submitVersion,
   deleteVersion,
   approveFinalVersion,
+  getFinalApprovalStatus,
 };
