@@ -492,6 +492,130 @@ async function main() {
 
   console.log("Test mentor seeded successfully.");
 
+    // =====================================================
+  // TEST ADMIN
+  // =====================================================
+
+  const adminRole = await prisma.role.findUnique({
+    where: {
+      name: "ADMIN",
+    },
+  });
+
+  if (!adminRole) {
+    throw new Error("ADMIN role not found.");
+  }
+
+  const adminPasswordHash = await bcrypt.hash("Admin1234!", 10);
+
+  await prisma.user.upsert({
+    where: {
+      email: "test.admin@example.com",
+    },
+    update: {
+      roleId: adminRole.id,
+      firstName: "Test",
+      lastName: "Admin",
+      isActive: true,
+    },
+    create: {
+      roleId: adminRole.id,
+      firstName: "Test",
+      lastName: "Admin",
+      email: "test.admin@example.com",
+      passwordHash: adminPasswordHash,
+    },
+  });
+
+  console.log("Test admin seeded successfully.");
+
+
+  // =====================================================
+  // TEST COMMITTEE MEMBERS
+  // =====================================================
+
+  const committeeRole = await prisma.role.findUnique({
+    where: {
+      name: "COMMITTEE_MEMBER",
+    },
+  });
+
+  if (!committeeRole) {
+    throw new Error("COMMITTEE_MEMBER role not found.");
+  }
+
+  const committeeMembers = [
+    {
+      email: "test.chair@example.com",
+      firstName: "Test",
+      lastName: "Chair",
+      academicTitle: "Prof. Dr.",
+      specialization: "Software Engineering",
+      department: "Computer Science and Engineering",
+    },
+    {
+      email: "test.member1@example.com",
+      firstName: "Test",
+      lastName: "Member One",
+      academicTitle: "Prof. Ass.",
+      specialization: "Artificial Intelligence",
+      department: "Computer Science and Engineering",
+    },
+    {
+      email: "test.member2@example.com",
+      firstName: "Test",
+      lastName: "Member Two",
+      academicTitle: "Prof. Ass.",
+      specialization: "Computer Networks",
+      department: "Computer Science and Engineering",
+    },
+  ];
+
+  const committeePasswordHash = await bcrypt.hash(
+    "Committee1234!",
+    10
+  );
+
+  for (const member of committeeMembers) {
+    const user = await prisma.user.upsert({
+      where: {
+        email: member.email,
+      },
+      update: {
+        roleId: committeeRole.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        isActive: true,
+      },
+      create: {
+        roleId: committeeRole.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        email: member.email,
+        passwordHash: committeePasswordHash,
+      },
+    });
+
+    await prisma.committeeMemberProfile.upsert({
+      where: {
+        userId: user.id,
+      },
+      update: {
+        academicTitle: member.academicTitle,
+        specialization: member.specialization,
+        department: member.department,
+      },
+      create: {
+        userId: user.id,
+        academicTitle: member.academicTitle,
+        specialization: member.specialization,
+        department: member.department,
+      },
+    });
+  }
+
+  console.log("Test committee members seeded successfully.");
+
   console.log("Database seed completed successfully.");
 }
 

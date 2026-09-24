@@ -10,6 +10,7 @@ const mentorRequestRoutes = require("./routes/mentor-request/mentor-request.rout
 const mentorRoutes = require("./routes/mentor/mentor.routes");
 const thesisRoutes = require("./routes/thesis/thesis.routes");
 const feedbackRoutes = require("./routes/feedback/feedback.routes");
+const committeeRoutes = require("./routes/committee/committee.routes");
 
 const app = express();
 
@@ -51,5 +52,6 @@ app.use("/api/mentor-requests", mentorRequestRoutes);
 app.use("/api/mentor", mentorRoutes);
 app.use("/api/thesis", thesisRoutes);
 app.use("/api/feedback", feedbackRoutes);
+app.use("/api/committee", committeeRoutes);
 
 module.exports = app;
