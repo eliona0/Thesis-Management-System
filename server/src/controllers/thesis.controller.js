@@ -190,59 +190,6 @@ const rejectThesis = async (req, res) => {
   }
 };
 
-const startThesis = async (req, res) => {
-  try {
-    const mentorUserId = req.user.userId;
-    const thesisId = Number(req.params.id);
-
-    if (Number.isNaN(thesisId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid thesis ID",
-      });
-    }
-
-    const thesis = await thesisService.startThesis({
-      mentorUserId,
-      thesisId,
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Thesis started successfully",
-      thesis,
-    });
-  } catch (error) {
-    console.error("Start thesis error:", error);
-
-    if (error.message === "THESIS_NOT_FOUND") {
-      return res.status(404).json({
-        success: false,
-        message: "Thesis not found",
-      });
-    }
-
-    if (error.message === "UNAUTHORIZED_THESIS") {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to start this thesis",
-      });
-    }
-
-    if (error.message === "THESIS_NOT_APPROVED") {
-      return res.status(409).json({
-        success: false,
-        message: "Only approved theses can be started",
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong",
-    });
-  }
-};
-
 const createVersion = async (req, res) => {
   try {
     const studentId = req.user.userId;
@@ -621,7 +568,6 @@ module.exports = {
   updateMyThesis,
   approveThesis,
    rejectThesis,
-   startThesis,
     createVersion,
   getMyThesisVersions,
   getMentorThesisVersions,

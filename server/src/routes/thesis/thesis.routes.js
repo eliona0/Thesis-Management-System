@@ -5,7 +5,6 @@ const {
   updateMyThesis,
   approveThesis,
   rejectThesis,
-  startThesis,
   createVersion,
   getMyThesisVersions,
   getMentorThesisVersions,
@@ -54,12 +53,6 @@ router.patch(
 );
 
 // Mentor: start approved thesis
-router.patch(
-  "/:id/start",
-  authenticate,
-  requireRole("MENTOR"),
-  startThesis
-);
 
 // Student: upload a new thesis version
 router.post(

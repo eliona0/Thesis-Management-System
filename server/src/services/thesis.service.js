@@ -96,27 +96,33 @@ const approveThesis = async ({ mentorUserId, thesisId }) => {
     throw new Error("THESIS_NOT_FOUND");
   }
 
-  // Only the mentor assigned to this thesis can approve it.
+  // Vetëm mentori i caktuar mund ta aprovojë temën
   if (thesis.mentorId !== mentorUserId) {
     throw new Error("UNAUTHORIZED_THESIS");
   }
 
-  // Only PENDING theses can be approved.
+  // Vetëm temat PENDING mund të aprovohen
   if (thesis.status !== "PENDING") {
     throw new Error("THESIS_NOT_PENDING");
   }
 
-  // The mentor should not approve an empty/untitled thesis.
-  if (!thesis.title || thesis.title.trim() === "" || thesis.title === "Untitled Thesis") {
+  // Titulli duhet të jetë plotësuar
+  if (
+    !thesis.title ||
+    thesis.title.trim() === "" ||
+    thesis.title === "Untitled Thesis"
+  ) {
     throw new Error("THESIS_TITLE_REQUIRED");
   }
 
-  const approvedThesis = await prisma.thesis.update({
+  // Me aprovimin e titullit, tema fillon zyrtarisht
+  const startedThesis = await prisma.thesis.update({
     where: {
       id: thesisId,
     },
     data: {
-      status: "APPROVED",
+      status: "IN_PROGRESS",
+      startedAt: new Date(),
     },
     include: {
       student: {
@@ -138,9 +144,8 @@ const approveThesis = async ({ mentorUserId, thesisId }) => {
     },
   });
 
-  return approvedThesis;
+  return startedThesis;
 };
-
 
 const rejectThesis = async ({
   mentorUserId,
@@ -196,58 +201,6 @@ const rejectThesis = async ({
     ...rejectedThesis,
     rejectionReason: rejectionReason || null,
   };
-};
-
-const startThesis = async ({ mentorUserId, thesisId }) => {
-  const thesis = await prisma.thesis.findUnique({
-    where: {
-      id: thesisId,
-    },
-  });
-
-  if (!thesis) {
-    throw new Error("THESIS_NOT_FOUND");
-  }
-
-  // Only the assigned mentor can start the thesis.
-  if (thesis.mentorId !== mentorUserId) {
-    throw new Error("UNAUTHORIZED_THESIS");
-  }
-
-  // Only approved theses can be moved to IN_PROGRESS.
-  if (thesis.status !== "APPROVED") {
-    throw new Error("THESIS_NOT_APPROVED");
-  }
-
-  const startedThesis = await prisma.thesis.update({
-    where: {
-      id: thesisId,
-    },
-    data: {
-      status: "IN_PROGRESS",
-      startedAt: new Date(),
-    },
-    include: {
-      student: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-      },
-      mentor: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-      },
-    },
-  });
-
-  return startedThesis;
 };
 
 const createThesisVersion = async ({
@@ -704,7 +657,6 @@ module.exports = {
   updateStudentThesis,
   approveThesis,
   rejectThesis,
-  startThesis,
   createThesisVersion,  
   getStudentThesisVersions,
   getMentorThesisVersions,
