@@ -1,4 +1,5 @@
 const thesisService = require("../services/thesis.service");
+const isValidId = (value) => Number.isSafeInteger(value) && value > 0;
 
 const getMyThesis = async (req, res) => {
   try {
@@ -80,7 +81,7 @@ const approveThesis = async (req, res) => {
     const mentorUserId = req.user.userId;
     const thesisId = Number(req.params.id);
 
-    if (Number.isNaN(thesisId)) {
+    if (!isValidId(thesisId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid thesis ID",
@@ -141,7 +142,7 @@ const rejectThesis = async (req, res) => {
     const thesisId = Number(req.params.id);
     const { rejectionReason } = req.body;
 
-    if (Number.isNaN(thesisId)) {
+    if (!isValidId(thesisId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid thesis ID",
@@ -216,7 +217,7 @@ const createVersion = async (req, res) => {
   } catch (error) {
     console.error("Create thesis version error:", error);
 
-    if (req.file && error.message === "THESIS_NOT_IN_PROGRESS") {
+    if (req.file) {
       const fs = require("fs");
       if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     }
@@ -291,7 +292,7 @@ const getMentorThesisVersions = async (req, res) => {
     const mentorUserId = req.user.userId;
     const thesisId = Number(req.params.thesisId);
 
-    if (Number.isNaN(thesisId)) {
+    if (!isValidId(thesisId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid thesis ID",
@@ -343,6 +344,7 @@ const submitVersion = async (req, res) => {
   try {
     const studentId = req.user.userId;
     const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
 
     const version = await thesisService.submitThesisVersion({
       studentId,
@@ -403,6 +405,7 @@ const deleteVersion = async (req, res) => {
   try {
     const studentId = req.user.userId;
     const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
 
     const result = await thesisService.deleteThesisVersion({
       studentId,
@@ -460,9 +463,11 @@ const deleteVersion = async (req, res) => {
 
 const submitFinalVersion = async (req, res) => {
   try {
+    const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
     const version = await thesisService.submitFinalThesisVersion({
       studentId: req.user.userId,
-      versionId: Number(req.params.versionId),
+      versionId,
     });
     return res.status(200).json({
       success: true,
@@ -499,6 +504,7 @@ const approveFinalVersion = async (req, res) => {
   try {
     const mentorUserId = req.user.userId;
     const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
 
     const { mentorFinalEvaluation, finalGrade } = req.body || {};
     const result = await thesisService.approveFinalThesisVersion({
@@ -554,6 +560,9 @@ const approveFinalVersion = async (req, res) => {
     if (error.message === "INVALID_FINAL_GRADE") {
       return res.status(400).json({ success: false, code: error.message, message: "Final grade must be between 6 and 10" });
     }
+    if (error.message === "INVALID_FINAL_EVALUATION") {
+      return res.status(400).json({ success: false, code: error.message, message: "Final evaluation must be text" });
+    }
 
     return res.status(500).json({
       success: false,
@@ -567,7 +576,7 @@ const getFinalApprovalStatus = async (req, res) => {
     const mentorUserId = req.user.userId;
     const versionId = Number(req.params.versionId);
 
-    if (Number.isNaN(versionId)) {
+    if (!isValidId(versionId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid version ID",

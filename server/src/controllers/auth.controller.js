@@ -11,16 +11,26 @@ const register = async (req, res) => {
       password,
       studentNumber,
       studyProgramId,
-    } = req.body;
+    } = req.body || {};
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const normalizedStudentNumber = typeof studentNumber === "string" ? studentNumber.trim() : "";
+    const normalizedStudyProgramId = Number(studyProgramId);
 
     // 1. Check required fields
     if (
       !firstName ||
       !lastName ||
-      !email ||
+      !normalizedEmail ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+      typeof password !== "string" ||
       !password ||
-      !studentNumber ||
-      !studyProgramId
+      !normalizedStudentNumber ||
+      !Number.isSafeInteger(normalizedStudyProgramId) ||
+      normalizedStudyProgramId <= 0 ||
+      typeof firstName !== "string" ||
+      !firstName.trim() ||
+      typeof lastName !== "string" ||
+      !lastName.trim()
     ) {
       return res.status(400).json({
         success: false,
@@ -31,7 +41,7 @@ const register = async (req, res) => {
     // 2. Check if email already exists
     const existingEmail = await prisma.user.findUnique({
       where: {
-        email,
+        email: normalizedEmail,
       },
     });
 
@@ -44,8 +54,8 @@ const register = async (req, res) => {
 
     // 3. Check if student number already exists
     const existingStudent = await prisma.studentProfile.findUnique({
-      where: {
-        studentNumber,
+        where: {
+        studentNumber: normalizedStudentNumber,
       },
     });
 
@@ -54,6 +64,14 @@ const register = async (req, res) => {
         success: false,
         message: "Student number already exists",
       });
+    }
+
+    const studyProgram = await prisma.studyProgram.findUnique({
+      where: { id: normalizedStudyProgramId },
+      select: { id: true, status: true },
+    });
+    if (!studyProgram || studyProgram.status !== "ACTIVE") {
+      return res.status(400).json({ success: false, message: "An active study program is required" });
     }
 
     // 4. Find STUDENT role
@@ -77,14 +95,14 @@ const register = async (req, res) => {
     const user = await prisma.user.create({
       data: {
         roleId: studentRole.id,
-        studyProgramId: Number(studyProgramId),
-        firstName,
-        lastName,
-        email,
+        studyProgramId: normalizedStudyProgramId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: normalizedEmail,
         passwordHash,
         studentProfile: {
           create: {
-            studentNumber,
+            studentNumber: normalizedStudentNumber,
           },
         },
       },
@@ -109,6 +127,10 @@ const register = async (req, res) => {
   } catch (error) {
     console.error("Register error:", error);
 
+    if (error.code === "P2002") {
+      return res.status(409).json({ success: false, message: "Email or student number already exists" });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Something went wrong during registration",
@@ -120,10 +142,11 @@ const register = async (req, res) => {
 // LOGIN
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
 
     // 1. Check required fields
-    if (!email || !password) {
+    if (!normalizedEmail || typeof password !== "string" || !password) {
       return res.status(400).json({
         success: false,
         message: "Email and password are required",
@@ -133,7 +156,7 @@ const login = async (req, res) => {
     // 2. Find user by email
     const user = await prisma.user.findUnique({
       where: {
-        email,
+        email: normalizedEmail,
       },
       include: {
         role: true,
@@ -147,6 +170,10 @@ const login = async (req, res) => {
         success: false,
         message: "Invalid email or password",
       });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
     // 4. Compare password

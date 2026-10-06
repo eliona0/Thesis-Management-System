@@ -1,10 +1,10 @@
 const jwt = require("jsonwebtoken");
+const prisma = require("../config/prisma");
 
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
+  let decoded;
   try {
-    // 1. Get Authorization header
     const authHeader = req.headers.authorization;
-
     if (!authHeader) {
       return res.status(401).json({
         success: false,
@@ -12,7 +12,6 @@ const authenticate = (req, res, next) => {
       });
     }
 
-    // 2. Check Bearer token
     const parts = authHeader.split(" ");
 
     if (parts.length !== 2 || parts[0] !== "Bearer") {
@@ -24,21 +23,30 @@ const authenticate = (req, res, next) => {
 
     const token = parts[1];
 
-    // 3. Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // 4. Attach authenticated user to request
-    req.user = decoded;
-
-    // 5. Continue to next middleware/controller
-    next();
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (error) {
-    console.error("Authentication error:", error);
-
     return res.status(401).json({
       success: false,
       message: "Invalid or expired token",
     });
+  }
+
+  if (!Number.isSafeInteger(decoded?.userId) || decoded.userId <= 0) {
+    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, isActive: true, role: { select: { name: true } } },
+    });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ success: false, message: "Account is unavailable" });
+    }
+    req.user = { userId: user.id, role: user.role.name };
+    return next();
+  } catch (error) {
+    return next(error);
   }
 };
 

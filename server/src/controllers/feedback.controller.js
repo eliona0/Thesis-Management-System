@@ -1,9 +1,11 @@
 const feedbackService = require("../services/feedback.service");
+const isValidId = (value) => Number.isSafeInteger(value) && value > 0;
 
 const createFeedback = async (req, res) => {
   try {
     const mentorUserId = req.user.userId;
     const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
     const { comment } = req.body;
 
     const result = await feedbackService.createFeedback({
@@ -49,6 +51,13 @@ const createFeedback = async (req, res) => {
       });
     }
 
+    if (error.message === "FINAL_VERSION_REQUIRES_APPROVAL") {
+      return res.status(409).json({
+        success: false,
+        message: "Final thesis versions must use mentor final approval",
+      });
+    }
+
     if (error.message === "FEEDBACK_ALREADY_EXISTS") {
       return res.status(409).json({
         success: false,
@@ -67,6 +76,7 @@ const getMyVersionFeedback = async (req, res) => {
   try {
     const studentId = req.user.userId;
     const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
 
     const feedback = await feedbackService.getStudentFeedback({
       studentId,

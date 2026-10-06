@@ -11,6 +11,13 @@ const { requireRole } = require("../../middleware/role.middleware");
 const router = express.Router();
 
 router.get(
+  "/profile",
+  authenticate,
+  requireRole("STUDENT"),
+  getProfile
+);
+
+router.get(
   "/mentors",
   authenticate,
   requireRole("STUDENT"),

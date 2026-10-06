@@ -50,6 +50,14 @@ const createMentorRequest = async (req, res) => {
       });
     }
 
+    if (error.message === "CANNOT_REQUEST_SELF") {
+      return res.status(400).json({ success: false, message: "You cannot request yourself as a mentor" });
+    }
+
+    if (error.message === "STUDENT_ALREADY_HAS_THESIS") {
+      return res.status(409).json({ success: false, message: "Student already has an active thesis" });
+    }
+
     if (error.message === "PENDING_REQUEST_EXISTS") {
       return res.status(409).json({
         success: false,
@@ -98,7 +106,7 @@ const acceptMentorRequest = async (req, res) => {
     const mentorUserId = req.user.userId;
     const requestId = Number(req.params.id);
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isSafeInteger(requestId) || requestId <= 0) {
       return res.status(400).json({
         success: false,
         message: "Invalid request ID",
@@ -147,6 +155,18 @@ const acceptMentorRequest = async (req, res) => {
       });
     }
 
+    if (error.message === "CANNOT_ACCEPT_OWN_REQUEST") {
+      return res.status(403).json({ success: false, message: "You cannot accept your own mentor request" });
+    }
+
+    if (error.message === "STUDENT_ALREADY_HAS_THESIS") {
+      return res.status(409).json({ success: false, message: "Student already has an active thesis" });
+    }
+
+    if (error.message === "REQUEST_CONFLICT") {
+      return res.status(409).json({ success: false, message: "The request changed while it was being processed" });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Something went wrong",
@@ -159,7 +179,7 @@ const rejectMentorRequest = async (req, res) => {
     const mentorUserId = req.user.userId;
     const requestId = Number(req.params.id);
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isSafeInteger(requestId) || requestId <= 0) {
       return res.status(400).json({
         success: false,
         message: "Invalid request ID",
@@ -208,13 +228,6 @@ const rejectMentorRequest = async (req, res) => {
       });
     }
 
-if (error.message === "STUDENT_ALREADY_HAS_THESIS") {
-  return res.status(409).json({
-    success: false,
-    message: "Student already has an active thesis",
-  });
-}
-
     return res.status(500).json({
       success: false,
       message: "Something went wrong",
@@ -222,8 +235,46 @@ if (error.message === "STUDENT_ALREADY_HAS_THESIS") {
   }
 };
 
+const getMyMentorRequests = async (req, res) => {
+  try {
+    const requests = await mentorRequestService.getStudentMentorRequests(req.user.userId);
+    return res.status(200).json({ success: true, requests });
+  } catch (error) {
+    console.error("Get student mentor requests error:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
+const cancelMentorRequest = async (req, res) => {
+  try {
+    const requestId = Number(req.params.id);
+    if (!Number.isSafeInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid request ID" });
+    }
+    const request = await mentorRequestService.cancelMentorRequest({
+      studentId: req.user.userId,
+      requestId,
+    });
+    return res.status(200).json({ success: true, message: "Mentor request cancelled successfully", request });
+  } catch (error) {
+    console.error("Cancel mentor request error:", error);
+    if (error.message === "REQUEST_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Mentor request not found" });
+    }
+    if (error.message === "UNAUTHORIZED_REQUEST") {
+      return res.status(403).json({ success: false, message: "You cannot cancel this mentor request" });
+    }
+    if (error.message === "REQUEST_NOT_PENDING") {
+      return res.status(409).json({ success: false, message: "Only pending requests can be cancelled" });
+    }
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
 module.exports = {
   createMentorRequest,
+  getMyMentorRequests,
+  cancelMentorRequest,
   getMentorRequests,
   acceptMentorRequest,
   rejectMentorRequest,

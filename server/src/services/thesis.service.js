@@ -60,16 +60,18 @@ const updateStudentThesis = async ({
     throw new Error("THESIS_ALREADY_APPROVED");
   }
 
-  const updatedThesis = await prisma.thesis.update({
-    where: {
-      id: thesis.id,
-    },
+  const update = await prisma.thesis.updateMany({
+    where: { id: thesis.id, status: { in: ["PENDING", "REJECTED"] } },
     data: {
       title,
       description: description || null,
       researchField: researchField || null,
       status: "PENDING",
     },
+  });
+  if (update.count !== 1) throw new Error("THESIS_ALREADY_APPROVED");
+  const updatedThesis = await prisma.thesis.findUnique({
+    where: { id: thesis.id },
     include: {
       mentor: {
         select: {
@@ -116,14 +118,13 @@ const approveThesis = async ({ mentorUserId, thesisId }) => {
   }
 
   // Me aprovimin e titullit, tema fillon zyrtarisht
-  const startedThesis = await prisma.thesis.update({
-    where: {
-      id: thesisId,
-    },
-    data: {
-      status: "IN_PROGRESS",
-      startedAt: new Date(),
-    },
+  const result = await prisma.thesis.updateMany({
+    where: { id: thesisId, mentorId: mentorUserId, status: "PENDING" },
+    data: { status: "IN_PROGRESS", startedAt: new Date() },
+  });
+  if (result.count !== 1) throw new Error("THESIS_NOT_PENDING");
+  const startedThesis = await prisma.thesis.findUnique({
+    where: { id: thesisId },
     include: {
       student: {
         select: {
@@ -170,13 +171,13 @@ const rejectThesis = async ({
     throw new Error("THESIS_NOT_PENDING");
   }
 
-  const rejectedThesis = await prisma.thesis.update({
-    where: {
-      id: thesisId,
-    },
-    data: {
-      status: "REJECTED",
-    },
+  const result = await prisma.thesis.updateMany({
+    where: { id: thesisId, mentorId: mentorUserId, status: "PENDING" },
+    data: { status: "REJECTED" },
+  });
+  if (result.count !== 1) throw new Error("THESIS_NOT_PENDING");
+  const rejectedThesis = await prisma.thesis.findUnique({
+    where: { id: thesisId },
     include: {
       student: {
         select: {
@@ -220,70 +221,58 @@ const createThesisVersion = async ({
     throw new Error("THESIS_NOT_IN_PROGRESS");
   }
 
-  // Check if there is already a draft or submitted version.
-  // Student must finish the current version before creating another one.
-  const activeVersion = await prisma.thesisVersion.findFirst({
-    where: {
-      thesisId: thesis.id,
-      status: {
-        in: ["DRAFT", "SUBMITTED"],
-      },
-    },
-  });
-
-  if (activeVersion) {
-    throw new Error("ACTIVE_VERSION_EXISTS");
+  const fs = require("fs");
+  const fileDescriptor = fs.openSync(filePath, "r");
+  const fileSignature = Buffer.alloc(5);
+  const signatureBytesRead = fs.readSync(fileDescriptor, fileSignature, 0, 5, 0);
+  fs.closeSync(fileDescriptor);
+  if (signatureBytesRead !== 5 || fileSignature.toString("ascii") !== "%PDF-") {
+    throw new Error("ONLY_PDF_FILES_ALLOWED");
   }
 
-  const lastVersion = await prisma.thesisVersion.findFirst({
-    where: { thesisId: thesis.id },
-    orderBy: { versionNumber: "desc" },
-  });
+  let movedFilePath;
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const thesisLock = await tx.thesis.updateMany({
+        where: { id: thesis.id, status: "IN_PROGRESS" },
+        data: { status: "IN_PROGRESS" },
+      });
+      if (thesisLock.count !== 1) throw new Error("THESIS_NOT_IN_PROGRESS");
 
-  const nextVersionNumber = lastVersion
-    ? lastVersion.versionNumber + 1
-    : 1;
+      const activeVersion = await tx.thesisVersion.findFirst({
+        where: { thesisId: thesis.id, status: { in: ["DRAFT", "SUBMITTED"] } },
+      });
+      if (activeVersion) throw new Error("ACTIVE_VERSION_EXISTS");
 
-  const storedFileName = path.basename(filePath);
+      const lastVersion = await tx.thesisVersion.findFirst({
+        where: { thesisId: thesis.id },
+        orderBy: { versionNumber: "desc" },
+      });
+      const nextVersionNumber = lastVersion ? lastVersion.versionNumber + 1 : 1;
+      const newFileName = `thesis-student-${studentId}-version-${nextVersionNumber}-${Date.now()}.pdf`;
+      movedFilePath = path.join(path.dirname(filePath), newFileName);
+      fs.renameSync(filePath, movedFilePath);
 
-  const newFileName = `thesis-student-${studentId}-version-${nextVersionNumber}-${Date.now()}.pdf`;
-
-  const oldFilePath = filePath;
-
-  const newFilePath = path.join(
-    path.dirname(oldFilePath),
-    newFileName
-  );
-
-  const fs = require("fs");
-
-  fs.renameSync(oldFilePath, newFilePath);
-
-  const relativeFilePath = `/uploads/theses/${newFileName}`;
-
-  await prisma.thesisVersion.updateMany({
-    where: {
-      thesisId: thesis.id,
-      isCurrent: true,
-    },
-    data: {
-      isCurrent: false,
-    },
-  });
-
-  const version = await prisma.thesisVersion.create({
-    data: {
-      thesisId: thesis.id,
-      versionNumber: nextVersionNumber,
-      fileName,
-      filePath: relativeFilePath,
-      uploadedBy: studentId,
-      status: "DRAFT",
-      isCurrent: true,
-    },
-  });
-
-  return version;
+      await tx.thesisVersion.updateMany({
+        where: { thesisId: thesis.id, isCurrent: true },
+        data: { isCurrent: false },
+      });
+      return tx.thesisVersion.create({
+        data: {
+          thesisId: thesis.id,
+          versionNumber: nextVersionNumber,
+          fileName,
+          filePath: `/uploads/theses/${newFileName}`,
+          uploadedBy: studentId,
+          status: "DRAFT",
+          isCurrent: true,
+        },
+      });
+    });
+  } catch (error) {
+    if (movedFilePath && fs.existsSync(movedFilePath)) fs.renameSync(movedFilePath, filePath);
+    throw error;
+  }
 };
 
 const deleteThesisVersion = async ({
@@ -330,13 +319,14 @@ const deleteThesisVersion = async ({
     path.basename(version.filePath)
   );
 
-  // Fshij file-in fizik
-  if (fs.existsSync(physicalFilePath)) {
-    fs.unlinkSync(physicalFilePath);
-  }
-
   // Rregullo isCurrent pas fshirjes
   const result = await prisma.$transaction(async (tx) => {
+    const thesisLock = await tx.thesis.updateMany({
+      where: { id: thesis.id, status: "IN_PROGRESS" },
+      data: { status: "IN_PROGRESS" },
+    });
+    if (thesisLock.count !== 1) throw new Error("THESIS_NOT_IN_PROGRESS");
+
     // 1. Fshije versionin
     await tx.thesisVersion.delete({
       where: { id: versionId },
@@ -380,6 +370,8 @@ const deleteThesisVersion = async ({
       message: "Draft version deleted successfully",
     };
   });
+
+  if (fs.existsSync(physicalFilePath)) fs.unlinkSync(physicalFilePath);
 
   return result;
 };
@@ -502,14 +494,19 @@ const submitThesisVersion = async ({
     throw new Error("VERSION_NOT_DRAFT");
   }
 
-  const submittedVersion = await prisma.thesisVersion.update({
-    where: { id: versionId },
-    data: {
-      status: "SUBMITTED",
-    },
+  return prisma.$transaction(async (tx) => {
+    const thesisLock = await tx.thesis.updateMany({
+      where: { id: thesis.id, status: "IN_PROGRESS" },
+      data: { status: "IN_PROGRESS" },
+    });
+    if (thesisLock.count !== 1) throw new Error("THESIS_NOT_IN_PROGRESS");
+    const update = await tx.thesisVersion.updateMany({
+      where: { id: versionId, thesisId: thesis.id, status: "DRAFT" },
+      data: { status: "SUBMITTED" },
+    });
+    if (update.count !== 1) throw new Error("VERSION_NOT_DRAFT");
+    return tx.thesisVersion.findUnique({ where: { id: versionId } });
   });
-
-  return submittedVersion;
 };
 
 const submitFinalThesisVersion = async ({ studentId, versionId }) => {
@@ -539,9 +536,19 @@ const submitFinalThesisVersion = async ({ studentId, versionId }) => {
     throw error;
   }
 
-  return prisma.thesisVersion.update({
-    where: { id: versionId },
-    data: { status: "SUBMITTED", submittedAt: new Date() },
+  const submittedAt = new Date();
+  return prisma.$transaction(async (tx) => {
+    const thesisLock = await tx.thesis.updateMany({
+      where: { id: thesis.id, status: "IN_PROGRESS" },
+      data: { status: "IN_PROGRESS" },
+    });
+    if (thesisLock.count !== 1) throw new Error("THESIS_NOT_IN_PROGRESS");
+    const update = await tx.thesisVersion.updateMany({
+      where: { id: versionId, thesisId: thesis.id, status: "DRAFT" },
+      data: { status: "SUBMITTED", submittedAt },
+    });
+    if (update.count !== 1) throw new Error("VERSION_NOT_DRAFT");
+    return tx.thesisVersion.findUnique({ where: { id: versionId } });
   });
 };
 
@@ -577,6 +584,10 @@ const approveFinalThesisVersion = async ({
 
   if (version.status !== "SUBMITTED") throw new Error("VERSION_NOT_SUBMITTED");
   if (!version.submittedAt) throw new Error("VERSION_SUBMISSION_DATE_NOT_FOUND");
+  if (mentorFinalEvaluation !== undefined && mentorFinalEvaluation !== null &&
+      typeof mentorFinalEvaluation !== "string") {
+    throw new Error("INVALID_FINAL_EVALUATION");
+  }
   if (finalGrade !== undefined && finalGrade !== null &&
       (!Number.isFinite(Number(finalGrade)) || Number(finalGrade) < 6 || Number(finalGrade) > 10)) {
     throw new Error("INVALID_FINAL_GRADE");

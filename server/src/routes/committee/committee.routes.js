@@ -4,6 +4,7 @@ const {
   assignCommittee,
   getCommittee,
   scheduleDefense,
+  createEvaluation,
 } = require("../../controllers/committee.controller");
 
 const { authenticate } = require("../../middleware/auth.middleware");
@@ -30,6 +31,13 @@ router.patch(
   authenticate,
   requireRole("ADMIN"),
   scheduleDefense
+);
+
+router.post(
+  "/thesis/:thesisId/evaluations",
+  authenticate,
+  requireRole("COMMITTEE_MEMBER"),
+  createEvaluation
 );
 
 module.exports = router;

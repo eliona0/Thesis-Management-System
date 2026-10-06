@@ -27,6 +27,10 @@ const createFeedback = async ({
     throw new Error("UNAUTHORIZED_VERSION");
   }
 
+  if (version.thesis.status !== "IN_PROGRESS" || version.submittedAt) {
+    throw new Error("FINAL_VERSION_REQUIRES_APPROVAL");
+  }
+
   // Feedback lejohet vetëm pasi studenti e ka submit-uar versionin
   if (version.status !== "SUBMITTED") {
     throw new Error("VERSION_NOT_SUBMITTED");
@@ -44,6 +48,12 @@ const createFeedback = async ({
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    const versionUpdate = await tx.thesisVersion.updateMany({
+      where: { id: versionId, status: "SUBMITTED", submittedAt: null },
+      data: { status: "REVIEWED" },
+    });
+    if (versionUpdate.count !== 1) throw new Error("VERSION_NOT_SUBMITTED");
+
     const feedback = await tx.feedback.create({
       data: {
         versionId,
@@ -52,14 +62,7 @@ const createFeedback = async ({
       },
     });
 
-    const updatedVersion = await tx.thesisVersion.update({
-      where: {
-        id: versionId,
-      },
-      data: {
-        status: "REVIEWED",
-      },
-    });
+    const updatedVersion = await tx.thesisVersion.findUnique({ where: { id: versionId } });
 
     return {
       feedback,

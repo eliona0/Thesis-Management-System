@@ -5,11 +5,14 @@ const {
   acceptMentorRequest,
   rejectMentorRequest,
 } = require("../../controllers/mentorRequest.controller");
+const { getProfile } = require("../../controllers/mentor.controller");
 
 const { authenticate } = require("../../middleware/auth.middleware");
 const { requireRole } = require("../../middleware/role.middleware");
 
 const router = express.Router();
+
+router.get("/profile", authenticate, requireRole("MENTOR"), getProfile);
 
 router.get(
   "/requests",
