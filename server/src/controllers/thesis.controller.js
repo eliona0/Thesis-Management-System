@@ -216,6 +216,11 @@ const createVersion = async (req, res) => {
   } catch (error) {
     console.error("Create thesis version error:", error);
 
+    if (req.file && error.message === "THESIS_NOT_IN_PROGRESS") {
+      const fs = require("fs");
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    }
+
     if (error.message === "THESIS_NOT_FOUND") {
       return res.status(404).json({
         success: false,
@@ -439,10 +444,54 @@ const deleteVersion = async (req, res) => {
       });
     }
 
+    if (error.message === "THESIS_NOT_IN_PROGRESS") {
+      return res.status(400).json({
+        success: false,
+        message: "Thesis versions cannot be changed after final approval",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Something went wrong",
     });
+  }
+};
+
+const submitFinalVersion = async (req, res) => {
+  try {
+    const version = await thesisService.submitFinalThesisVersion({
+      studentId: req.user.userId,
+      versionId: Number(req.params.versionId),
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Final thesis version submitted successfully",
+      version,
+    });
+  } catch (error) {
+    console.error("Submit final thesis version error:", error);
+    const messages = {
+      THESIS_NOT_FOUND: [404, "Thesis not found"],
+      THESIS_NOT_IN_PROGRESS: [400, "Thesis must be in progress"],
+      VERSION_NOT_FOUND: [404, "Thesis version not found"],
+      UNAUTHORIZED_VERSION: [403, "You cannot submit this thesis version"],
+      VERSION_NOT_DRAFT: [400, "Only draft versions can be submitted"],
+      THESIS_START_DATE_NOT_FOUND: [400, "Thesis start date is not available"],
+    };
+    if (error.message === "MINIMUM_DURATION_NOT_COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        code: error.message,
+        message: "Minimum thesis duration has not yet been completed.",
+        earliestFinalSubmissionDate: error.earliestFinalSubmissionDate,
+      });
+    }
+    if (messages[error.message]) {
+      const [status, message] = messages[error.message];
+      return res.status(status).json({ success: false, message });
+    }
+    return res.status(500).json({ success: false, message: "Something went wrong" });
   }
 };
 
@@ -451,10 +500,13 @@ const approveFinalVersion = async (req, res) => {
     const mentorUserId = req.user.userId;
     const versionId = Number(req.params.versionId);
 
-const result = await thesisService.approveFinalThesisVersion({
-  mentorUserId,
-  versionId,
-});
+    const { mentorFinalEvaluation, finalGrade } = req.body || {};
+    const result = await thesisService.approveFinalThesisVersion({
+      mentorUserId,
+      versionId,
+      mentorFinalEvaluation,
+      finalGrade,
+    });
 
     return res.status(200).json({
       success: true,
@@ -486,23 +538,22 @@ const result = await thesisService.approveFinalThesisVersion({
       });
     }
 
-    if (error.message === "VERSION_NOT_REVIEWED") {
+    if (error.message === "VERSION_NOT_SUBMITTED") {
       return res.status(400).json({
         success: false,
-        message: "Only reviewed thesis versions can be approved",
+        message: "Only submitted thesis versions can be approved",
       });
     }
 
-    if (error.message === "MINIMUM_DURATION_NOT_COMPLETED") {
-  return res.status(400).json({
-    success: false,
-    code: "MINIMUM_DURATION_NOT_COMPLETED",
-    message:
-      "Minimum thesis duration has not yet been completed.",
-    earliestFinalSubmissionDate:
-      error.earliestFinalSubmissionDate,
-  });
-}
+    if (error.message === "VERSION_SUBMISSION_DATE_NOT_FOUND") {
+      return res.status(400).json({ success: false, message: "Version submission date is not available" });
+    }
+    if (error.message === "FINAL_EVALUATION_DEADLINE_EXCEEDED") {
+      return res.status(400).json({ success: false, code: error.message, message: "The final evaluation deadline has passed" });
+    }
+    if (error.message === "INVALID_FINAL_GRADE") {
+      return res.status(400).json({ success: false, code: error.message, message: "Final grade must be between 6 and 10" });
+    }
 
     return res.status(500).json({
       success: false,
@@ -572,6 +623,7 @@ module.exports = {
   getMyThesisVersions,
   getMentorThesisVersions,
   submitVersion,
+  submitFinalVersion,
   deleteVersion,
   approveFinalVersion,
   getFinalApprovalStatus,

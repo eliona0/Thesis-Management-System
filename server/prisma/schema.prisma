@@ -216,16 +216,19 @@ model MentorRequest {
 // ======================================================
 
 model Thesis {
-  id            Int          @id @default(autoincrement())
-  studentId     Int
-  mentorId      Int
-  title         String       @db.VarChar(255)
-  description   String?      @db.Text
-  researchField String?      @db.VarChar(150)
-  status        ThesisStatus @default(PENDING)
-  startedAt     DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                    Int          @id @default(autoincrement())
+  studentId             Int
+  mentorId              Int
+  title                 String       @db.VarChar(255)
+  description           String?      @db.Text
+  researchField         String?      @db.VarChar(150)
+  status                ThesisStatus @default(PENDING)
+  startedAt             DateTime?
+  mentorFinalEvaluation String?      @db.Text
+  finalEvaluatedAt      DateTime?
+  finalGrade            Decimal?     @db.Decimal(4, 2)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   student User @relation("StudentTheses", fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -253,6 +256,8 @@ model ThesisVersion {
   status        ThesisVersionStatus @default(DRAFT)
   isCurrent     Boolean             @default(false)
   uploadedAt    DateTime            @default(now())
+  submittedAt   DateTime?
+  reviewedAt    DateTime?
 
   thesis Thesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
 

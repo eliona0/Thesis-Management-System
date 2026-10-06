@@ -310,6 +310,10 @@ const deleteThesisVersion = async ({
     throw new Error("UNAUTHORIZED_VERSION");
   }
 
+  if (thesis.status !== "IN_PROGRESS") {
+    throw new Error("THESIS_NOT_IN_PROGRESS");
+  }
+
   if (version.status !== "DRAFT") {
     throw new Error("VERSION_CANNOT_BE_DELETED");
   }
@@ -508,10 +512,45 @@ const submitThesisVersion = async ({
   return submittedVersion;
 };
 
+const submitFinalThesisVersion = async ({ studentId, versionId }) => {
+  const thesis = await prisma.thesis.findFirst({ where: { studentId } });
+  if (!thesis) throw new Error("THESIS_NOT_FOUND");
+  if (thesis.status !== "IN_PROGRESS") throw new Error("THESIS_NOT_IN_PROGRESS");
+
+  const version = await prisma.thesisVersion.findUnique({ where: { id: versionId } });
+  if (!version) throw new Error("VERSION_NOT_FOUND");
+  if (version.thesisId !== thesis.id) throw new Error("UNAUTHORIZED_VERSION");
+  if (version.status !== "DRAFT") throw new Error("VERSION_NOT_DRAFT");
+  if (!thesis.startedAt) throw new Error("THESIS_START_DATE_NOT_FOUND");
+
+  const earliestFinalSubmissionDate = new Date(thesis.startedAt);
+  const startDay = earliestFinalSubmissionDate.getDate();
+  earliestFinalSubmissionDate.setDate(1);
+  earliestFinalSubmissionDate.setMonth(earliestFinalSubmissionDate.getMonth() + 3);
+  const finalMonthLastDay = new Date(
+    earliestFinalSubmissionDate.getFullYear(),
+    earliestFinalSubmissionDate.getMonth() + 1,
+    0
+  ).getDate();
+  earliestFinalSubmissionDate.setDate(Math.min(startDay, finalMonthLastDay));
+  if (new Date() < earliestFinalSubmissionDate) {
+    const error = new Error("MINIMUM_DURATION_NOT_COMPLETED");
+    error.earliestFinalSubmissionDate = earliestFinalSubmissionDate;
+    throw error;
+  }
+
+  return prisma.thesisVersion.update({
+    where: { id: versionId },
+    data: { status: "SUBMITTED", submittedAt: new Date() },
+  });
+};
+
 
 const approveFinalThesisVersion = async ({
   mentorUserId,
   versionId,
+  mentorFinalEvaluation,
+  finalGrade,
 }) => {
   const version = await prisma.thesisVersion.findUnique({
     where: {
@@ -536,56 +575,40 @@ const approveFinalThesisVersion = async ({
     throw new Error("THESIS_NOT_IN_PROGRESS");
   }
 
-  // Vetëm versioni REVIEWED mund të aprovohet finalisht
-  if (version.status !== "REVIEWED") {
-    throw new Error("VERSION_NOT_REVIEWED");
+  if (version.status !== "SUBMITTED") throw new Error("VERSION_NOT_SUBMITTED");
+  if (!version.submittedAt) throw new Error("VERSION_SUBMISSION_DATE_NOT_FOUND");
+  if (finalGrade !== undefined && finalGrade !== null &&
+      (!Number.isFinite(Number(finalGrade)) || Number(finalGrade) < 6 || Number(finalGrade) > 10)) {
+    throw new Error("INVALID_FINAL_GRADE");
   }
 
-  // Kontrollo nëse tema e ka startedAt
-  if (!version.thesis.startedAt) {
-    throw new Error("THESIS_START_DATE_NOT_FOUND");
-  }
-
-  // Minimumi 3 muaj nga fillimi zyrtar i temës
-  const earliestFinalSubmissionDate = new Date(
-    version.thesis.startedAt
-  );
-
-  earliestFinalSubmissionDate.setMonth(
-    earliestFinalSubmissionDate.getMonth() + 3
-  );
-
-  // Nëse 3 muajt nuk kanë kaluar ende
-  if (new Date() < earliestFinalSubmissionDate) {
-    const error = new Error("MINIMUM_DURATION_NOT_COMPLETED");
-
-    error.earliestFinalSubmissionDate =
-      earliestFinalSubmissionDate;
-
-    throw error;
-  }
+  const evaluationDeadline = new Date(version.submittedAt);
+  evaluationDeadline.setDate(evaluationDeadline.getDate() + 7);
+  if (new Date() > evaluationDeadline) throw new Error("FINAL_EVALUATION_DEADLINE_EXCEEDED");
+  const evaluatedAt = new Date();
 
   const result = await prisma.$transaction(async (tx) => {
-    // Versioni bëhet final
-    const approvedVersion = await tx.thesisVersion.update({
-      where: {
-        id: versionId,
-      },
-      data: {
-        status: "APPROVED",
-        isCurrent: true,
-      },
-    });
-
-    // Thesis kalon në fazën e dorëzimit final
-    const updatedThesis = await tx.thesis.update({
-      where: {
-        id: version.thesisId,
-      },
+    const thesisLock = await tx.thesis.updateMany({
+      where: { id: version.thesisId, status: "IN_PROGRESS" },
       data: {
         status: "SUBMITTED",
+        mentorFinalEvaluation: mentorFinalEvaluation ?? null,
+        finalEvaluatedAt: evaluatedAt,
+        finalGrade: finalGrade ?? null,
       },
     });
+    if (thesisLock.count !== 1) throw new Error("THESIS_NOT_IN_PROGRESS");
+
+    const versionLock = await tx.thesisVersion.updateMany({
+      where: { id: versionId, thesisId: version.thesisId, status: "SUBMITTED" },
+      data: { status: "APPROVED", isCurrent: true, reviewedAt: evaluatedAt },
+    });
+    if (versionLock.count !== 1) throw new Error("VERSION_NOT_SUBMITTED");
+
+    const [approvedVersion, updatedThesis] = await Promise.all([
+      tx.thesisVersion.findUnique({ where: { id: versionId } }),
+      tx.thesis.findUnique({ where: { id: version.thesisId } }),
+    ]);
 
     return {
       version: approvedVersion,
@@ -617,38 +640,23 @@ const getFinalApprovalStatus = async ({
     throw new Error("UNAUTHORIZED_VERSION");
   }
 
-  if (!version.thesis.startedAt) {
-    throw new Error("THESIS_START_DATE_NOT_FOUND");
-  }
-
-  const earliestFinalSubmissionDate = new Date(
-    version.thesis.startedAt
-  );
-
-  earliestFinalSubmissionDate.setMonth(
-    earliestFinalSubmissionDate.getMonth() + 3
-  );
-
   const now = new Date();
-
-  const durationCompleted =
-    now >= earliestFinalSubmissionDate;
+  const evaluationDeadline = version.submittedAt
+    ? new Date(version.submittedAt)
+    : null;
+  if (evaluationDeadline) evaluationDeadline.setDate(evaluationDeadline.getDate() + 7);
 
   return {
-    available:
-      version.status === "REVIEWED" &&
+    available: version.status === "SUBMITTED" &&
       version.thesis.status === "IN_PROGRESS" &&
-      durationCompleted,
+      Boolean(evaluationDeadline) && now <= evaluationDeadline,
 
     versionStatus: version.status,
 
     thesisStatus: version.thesis.status,
 
-    startedAt: version.thesis.startedAt,
-
-    earliestFinalSubmissionDate,
-
-    durationCompleted,
+    submittedAt: version.submittedAt,
+    evaluationDeadline,
   };
 };
 
@@ -661,6 +669,7 @@ module.exports = {
   getStudentThesisVersions,
   getMentorThesisVersions,
   submitThesisVersion,
+  submitFinalThesisVersion,
   deleteThesisVersion,
   approveFinalThesisVersion,
   getFinalApprovalStatus,

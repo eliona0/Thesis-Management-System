@@ -9,6 +9,7 @@ const {
   getMyThesisVersions,
   getMentorThesisVersions,
   submitVersion,
+  submitFinalVersion,
   deleteVersion,
   approveFinalVersion,
   getFinalApprovalStatus,
@@ -83,6 +84,13 @@ router.patch(
   authenticate,
   requireRole("STUDENT"),
   submitVersion
+);
+
+router.patch(
+  "/my-thesis/versions/:versionId/submit-final",
+  authenticate,
+  requireRole("STUDENT"),
+  submitFinalVersion
 );
 
 router.delete(
