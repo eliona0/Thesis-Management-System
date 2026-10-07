@@ -216,6 +216,26 @@ const scheduleDefense = async (req, res) => {
   }
 };
 
+const getCommitteeMembers = async (req, res) => {
+  try {
+    const members = await committeeService.getCommitteeMembers();
+    return res.status(200).json({ success: true, members });
+  } catch (error) {
+    console.error("Get committee members error:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
+const getMyCommittees = async (req, res) => {
+  try {
+    const assignments = await committeeService.getMyCommittees(req.user.userId);
+    return res.status(200).json({ success: true, assignments });
+  } catch (error) {
+    console.error("Get member committees error:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
 const createEvaluation = async (req, res) => {
   try {
     const result = await committeeService.createEvaluation({
@@ -253,6 +273,8 @@ const createEvaluation = async (req, res) => {
 module.exports = {
   assignCommittee,
   getCommittee,
+  getCommitteeMembers,
+  getMyCommittees,
   scheduleDefense,
   createEvaluation,
 };

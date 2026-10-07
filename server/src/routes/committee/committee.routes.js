@@ -3,6 +3,8 @@ const express = require("express");
 const {
   assignCommittee,
   getCommittee,
+  getCommitteeMembers,
+  getMyCommittees,
   scheduleDefense,
   createEvaluation,
 } = require("../../controllers/committee.controller");
@@ -11,6 +13,9 @@ const { authenticate } = require("../../middleware/auth.middleware");
 const { requireRole } = require("../../middleware/role.middleware");
 
 const router = express.Router();
+
+router.get("/members", authenticate, requireRole("ADMIN"), getCommitteeMembers);
+router.get("/my", authenticate, requireRole("COMMITTEE_MEMBER"), getMyCommittees);
 
 router.post(
   "/thesis/:thesisId",

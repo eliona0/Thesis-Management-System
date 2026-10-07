@@ -13,6 +13,7 @@ const setup = () => ({
   theses: new Map([[100, { id: 100, studentId: 2, mentorId: 3, title: "Bachelor", status: "IN_PROGRESS", startedAt: new Date() }], [101, { id: 101, studentId: 9, mentorId: 8, title: "Grade 10", status: "IN_PROGRESS", startedAt: new Date() }], [200, { id: 200, studentId: 9, mentorId: 8, title: "Committee", status: "SUBMITTED", startedAt: new Date() }], [300, { id: 300, studentId: 10, mentorId: 3, title: "Draft proposal", status: "PENDING", startedAt: null }]]),
   versions: new Map([[1000, { id: 1000, thesisId: 100, versionNumber: 2, status: "DRAFT", isCurrent: true, submittedAt: null }], [1001, { id: 1001, thesisId: 100, versionNumber: 1, status: "DRAFT", isCurrent: false, submittedAt: null }], [1010, { id: 1010, thesisId: 101, versionNumber: 1, status: "DRAFT", isCurrent: true, submittedAt: null }]]),
   profiles: [...[101, 102, 103, 104].map((id, i) => ({ id, userId: i + 4, isActive: true })), { id: 105, userId: 99, isActive: false }],
+  studyPrograms: [{ id: 1, name: "Computer Science", status: "ACTIVE" }, { id: 2, name: "Inactive Program", status: "INACTIVE" }],
   committee: null, evaluations: [], feedback: [], requests: [{ id: 55, studentId: 2, mentorId: 30, status: "PENDING" }, { id: 56, studentId: 2, mentorId: 30, status: "PENDING" }, { id: 57, studentId: 11, mentorId: 30, status: "PENDING" }, { id: 58, studentId: 3, mentorId: 30, status: "PENDING" }],
   mentors: [{ id: 30, userId: 3 }, { id: 31, userId: 8 }],
 });
@@ -37,17 +38,25 @@ const prisma = {
   },
   committeeMemberProfile: {
     findUnique: async ({ where }) => profileFor(where),
-    findMany: async ({ where }) => db.profiles.filter((p) => where.id.in.includes(p.id)).map((p) => ({ ...p, user: { isActive: p.isActive, role: { name: "COMMITTEE_MEMBER" } } })),
+    findMany: async ({ where }) => db.profiles.filter((p) => where.id ? where.id.in.includes(p.id) : p.isActive).map((p) => ({ ...p, userId: p.userId, academicTitle: null, specialization: null, department: null, user: { isActive: p.isActive, firstName: "Member", lastName: "Test", email: "member@example.test", role: { name: "COMMITTEE_MEMBER" } } })),
   },
+  studyProgram: { findMany: async ({ where }) => db.studyPrograms.filter((p) => p.status === where.status).map(({ id, name }) => ({ id, name })) },
   mentorProfile: { findUnique: async ({ where }) => db.mentors.find((m) => where.userId ? m.userId === where.userId : m.id === where.id) || null },
   committee: {
     create: async ({ data }) => (db.committee = { id: 800, thesisId: data.thesisId, status: data.status, assignedDate: new Date(), defenseDate: null, members: data.members.create.map((m, i) => ({ id: i + 1, ...m })) }),
     findUnique: async ({ where, include }) => { const row = db.committee && (where.id ? db.committee.id === where.id : db.committee.thesisId === where.thesisId) ? db.committee : null; return row && (include?.members ? { ...row, members: committeeRows() } : row); },
     updateMany: async ({ where, data }) => { if (!db.committee || db.committee.id !== where.id || db.committee.status !== where.status) return { count: 0 }; Object.assign(db.committee, data); return { count: 1 }; },
   },
+  committeeMember: {
+    findMany: async ({ where }) => db.committee?.members.filter((m) => m.committeeMemberId === where.committeeMemberId).map((m) => ({
+      id: m.id, role: m.role,
+      committee: { id: db.committee.id, status: db.committee.status, defenseDate: db.committee.defenseDate,
+        thesis: { id: 200, title: "Committee", status: t(200).status, student: { id: 9, firstName: "Student", lastName: "Test", email: "student@example.test" } } },
+    })) || [],
+  },
   evaluation: {
     create: async ({ data }) => { if (db.evaluations.some((e) => e.thesisId === data.thesisId && e.committeeMemberId === data.committeeMemberId)) { const error = new Error(); error.code = "P2002"; throw error; } const row = { id: 900 + db.evaluations.length, ...data, evaluationDate: new Date() }; db.evaluations.push(row); return row; },
-    findMany: async ({ where }) => db.evaluations.filter((e) => e.thesisId === where.thesisId),
+    findMany: async ({ where }) => db.evaluations.filter((e) => where.committeeMemberId ? e.committeeMemberId === where.committeeMemberId : e.thesisId === where.thesisId),
   },
   feedback: {
     findFirst: async ({ where }) => db.feedback.find((f) => f.versionId === where.versionId) || null,
@@ -81,6 +90,47 @@ test("current role and account activity are enforced", async () => {
   assert.equal((await api("/api/committee/thesis/200", { id: 2 })).status, 403);
   db.users.get(2)[1] = false;
   assert.equal((await api("/api/thesis/my-thesis", { id: 2 })).status, 401);
+});
+
+test("study programs are public and expose only active program identity", async () => {
+  const result = await api("/api/study-programs");
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.json, { success: true, programs: [{ id: 1, name: "Computer Science" }] });
+});
+
+test("committee directory is admin-only and returns minimal active identities", async () => {
+  assert.equal((await api("/api/committee/members")).status, 401);
+  assert.equal((await api("/api/committee/members", { id: 2 })).status, 403);
+  const result = await api("/api/committee/members", { id: 1 });
+  assert.equal(result.status, 200);
+  assert.ok(result.json.members.length > 0);
+  assert.equal(JSON.stringify(result.json).includes("passwordHash"), false);
+  assert.equal(JSON.stringify(result.json).includes("Inactive Program"), false);
+  assert.deepEqual(Object.keys(result.json.members[0]).sort(), ["email", "firstName", "id", "lastName", "userId"].sort());
+});
+
+test("committee members see only their assignments and own evaluation", async () => {
+  assert.equal((await api("/api/committee/my")).status, 401);
+  assert.equal((await api("/api/committee/my", { id: 2 })).status, 403);
+  const path = "/api/committee/thesis/200";
+  await api(path, { id: 1, method: "POST", body: { members: [
+    { committeeMemberId: 101, role: "CHAIR" }, { committeeMemberId: 102, role: "MEMBER" }, { committeeMemberId: 103, role: "MEMBER" },
+  ] } });
+  await api(path + "/schedule", { id: 1, method: "PATCH", body: { defenseDate: new Date(Date.now() + 86400000).toISOString() } });
+  await api(path + "/evaluations", { id: 4, method: "POST", body: { grade: 9, comments: "Own evaluation" } });
+  await api(path + "/evaluations", { id: 5, method: "POST", body: { grade: 8, comments: "Other member evaluation" } });
+  const own = await api("/api/committee/my", { id: 4 });
+  assert.equal(own.status, 200);
+  assert.equal(own.json.assignments.length, 1);
+  assert.equal(own.json.assignments[0].committee.status, "SCHEDULED");
+  assert.ok(own.json.assignments[0].committee.defenseDate);
+  assert.deepEqual(own.json.assignments[0].thesis, { id: 200, title: "Committee", status: "SUBMITTED", student: { id: 9, firstName: "Student", lastName: "Test", email: "student@example.test" } });
+  assert.deepEqual(own.json.assignments[0].member, { id: 101, role: "CHAIR" });
+  assert.equal(own.json.assignments[0].evaluation.comments, "Own evaluation");
+  assert.notEqual(own.json.assignments[0].evaluation.comments, "Other member evaluation");
+  const unassigned = await api("/api/committee/my", { id: 7 });
+  assert.deepEqual(unassigned.json, { success: true, assignments: [] });
+  assert.equal(JSON.stringify(own.json).includes("passwordHash"), false);
 });
 
 test("thesis PDF URLs require authentication and thesis ownership", async () => {

@@ -11,6 +11,7 @@ const mentorRoutes = require("./routes/mentor/mentor.routes");
 const thesisRoutes = require("./routes/thesis/thesis.routes");
 const feedbackRoutes = require("./routes/feedback/feedback.routes");
 const committeeRoutes = require("./routes/committee/committee.routes");
+const { getActiveStudyPrograms } = require("./controllers/studyProgram.controller");
 const { authenticate } = require("./middleware/auth.middleware");
 const { authorizeThesisFile } = require("./middleware/thesis-file.middleware");
 
@@ -71,5 +72,7 @@ app.use((error, req, res, next) => {
   console.error("Unhandled API error:", error);
   return res.status(500).json({ success: false, message: "Something went wrong" });
 });
+
+app.get("/api/study-programs", getActiveStudyPrograms);
 
 module.exports = app;

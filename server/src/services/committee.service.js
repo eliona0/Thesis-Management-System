@@ -112,6 +112,67 @@ const getCommittee = async (thesisId) => {
   return committee;
 };
 
+const getCommitteeMembers = async () => {
+  const profiles = await prisma.committeeMemberProfile.findMany({
+    where: { user: { isActive: true, role: { name: "COMMITTEE_MEMBER" } } },
+    select: {
+      id: true, userId: true,
+      user: { select: { firstName: true, lastName: true, email: true } },
+    },
+    orderBy: { user: { firstName: "asc" } },
+  });
+  return profiles.map((profile) => ({
+    id: profile.id,
+    userId: profile.userId,
+    firstName: profile.user.firstName,
+    lastName: profile.user.lastName,
+    email: profile.user.email,
+  }));
+};
+
+const getMyCommittees = async (userId) => {
+  const profile = await prisma.committeeMemberProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!profile) return [];
+
+  const memberships = await prisma.committeeMember.findMany({
+    where: { committeeMemberId: profile.id },
+    orderBy: { committee: { assignedDate: "desc" } },
+    select: {
+      id: true,
+      role: true,
+      committee: {
+        select: {
+          id: true, status: true, defenseDate: true,
+          thesis: {
+            select: {
+              id: true, title: true, status: true,
+              student: { select: { id: true, firstName: true, lastName: true, email: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  const evaluations = await prisma.evaluation.findMany({
+    where: { committeeMemberId: profile.id },
+    select: { id: true, thesisId: true, grade: true, comments: true, evaluationDate: true },
+  });
+  const evaluationByThesis = new Map(evaluations.map((evaluation) => [evaluation.thesisId, evaluation]));
+  return memberships.map(({ committee, ...membership }) => ({
+    committee: {
+      id: committee.id,
+      status: committee.status,
+      defenseDate: committee.defenseDate,
+    },
+    thesis: committee.thesis,
+    member: { id: profile.id, role: membership.role },
+    evaluation: evaluationByThesis.get(committee.thesis.id) || null,
+  }));
+};
+
 const scheduleDefense = async ({ thesisId, defenseDate }) => {
   const normalizedThesisId = Number(thesisId);
   if (!Number.isSafeInteger(normalizedThesisId) || normalizedThesisId <= 0) {
@@ -216,6 +277,8 @@ const createEvaluation = async ({ committeeMemberUserId, thesisId, grade, commen
 module.exports = {
   assignCommittee,
   getCommittee,
+  getCommitteeMembers,
+  getMyCommittees,
   scheduleDefense,
   createEvaluation,
 };
