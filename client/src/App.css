@@ -254,6 +254,13 @@
 .version-card .student-detail-list { margin-top: 0; }
 .version-card .student-detail-list > div { justify-content: flex-start; }
 .version-card .student-detail-list dt { width: 110px; flex: 0 0 auto; }
+.version-feedback { padding: 14px; border: 1px solid #dce7f1; border-radius: 9px; background: #f8fbfe; }
+.version-feedback > p, .version-feedback-item p { margin: 8px 0; color: #344054; white-space: pre-wrap; }
+.version-feedback-item + .version-feedback-item { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e6edf4; }
+.version-feedback-item small { color: var(--muted); font-size: 11px; }
+.mentor-feedback-form { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid #edf0f4; }
+.mentor-feedback-form label { color: var(--ink); font-size: 13px; font-weight: 600; }
+.mentor-feedback-form textarea { width: 100%; padding: 11px 12px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; }
 .status-draft { background: #fff6e7; color: #94630e; }
 .status-submitted { background: #eef4fa; color: #345c83; }
 .status-approved { background: #eff8f2; color: #39734c; }

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useCallback, useEffect, useState } from 'react'
 import api, { getApiErrorMessage } from '../../services/api'
 
@@ -112,6 +113,7 @@ export default function Theses() {
                   <div><dt>Last updated</dt><dd>{formatDate(thesis.updatedAt)}</dd></div>
                   {thesis.startedAt && <div><dt>Started</dt><dd>{formatDate(thesis.startedAt)}</dd></div>}
                 </dl>
+                {thesis.status === 'IN_PROGRESS' && <Link className="button button-primary" to={`/mentor/theses/${thesis.id}/versions`}>Review thesis versions</Link>}
                 {pending ? <div className="mentor-thesis-actions"><button className="button button-primary" type="button" disabled={actionId !== null} onClick={() => approveThesis(thesis)}>{busy ? <><span className="spinner" aria-hidden="true" /> Please wait…</> : 'Approve'}</button><button className="button button-quiet button-reject" type="button" disabled={actionId !== null} onClick={() => openRejectDialog(thesis)}>Reject / Request Changes</button></div>
                   : thesis.status === 'IN_PROGRESS' ? <p className="mentor-thesis-status-note">Approved. The student can now continue thesis work.</p>
                     : thesis.status === 'REJECTED' ? <p className="mentor-thesis-status-note">This thesis was rejected. No rejection reason is stored.</p> : null}

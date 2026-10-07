@@ -13,6 +13,7 @@ import Versions from '../pages/student/Versions'
 import MentorDashboard from '../pages/mentor/MentorDashboard'
 import MentorRequestsPage from '../pages/mentor/ThesisRequests'
 import MentorTheses from '../pages/mentor/Theses'
+import MentorVersions from '../pages/mentor/Versions'
 
 function LoadingScreen() {
   return <div className="screen-state" role="status"><span className="spinner" />Checking your session…</div>
@@ -90,6 +91,7 @@ export default function AppRoutes() {
             <Route path="dashboard" element={<MentorDashboard />} />
             <Route path="requests" element={<MentorRequestsPage />} />
             <Route path="theses" element={<MentorTheses />} />
+            <Route path="theses/:thesisId/versions" element={<MentorVersions />} />
             <Route path="thesis-requests" element={<Navigate to="/mentor/requests" replace />} />
             <Route path="students" element={<FoundationPage title="Students" />} />
             <Route path="feedback" element={<FoundationPage title="Feedback" />} />

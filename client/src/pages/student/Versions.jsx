@@ -25,7 +25,17 @@ export default function Versions() {
         api.get('/thesis/my-thesis/versions'),
       ])
       setThesis(thesisResponse.data.thesis || null)
-      setVersions(Array.isArray(versionsResponse.data.versions) ? versionsResponse.data.versions : [])
+      const loadedVersions = Array.isArray(versionsResponse.data.versions) ? versionsResponse.data.versions : []
+      const feedbackResults = await Promise.all(loadedVersions.map(async (version) => {
+        try {
+          const { data } = await api.get(`/feedback/my-version/${version.id}`)
+          return [version.id, Array.isArray(data.feedback) ? data.feedback : []]
+        } catch {
+          return [version.id, []]
+        }
+      }))
+      const feedbackByVersion = new Map(feedbackResults)
+      setVersions(loadedVersions.map((version) => ({ ...version, feedback: feedbackByVersion.get(version.id) || [] })))
     } catch (error) {
       if (error.response?.status === 404) {
         setThesis(null)
@@ -168,6 +178,7 @@ export default function Versions() {
         {versions.length === 0 ? <div className="mentor-request-state">No thesis versions have been uploaded yet.</div> : <div className="version-list">{versions.map((version) => <article className="student-panel version-card" key={version.id}>
           <div className="version-card-heading"><div><span className="eyebrow">Version {version.versionNumber}</span><h3>{version.fileName || `Thesis version ${version.versionNumber}`}</h3></div><span className={`request-status status-${String(version.status || '').toLowerCase()}`}>{formatStatus(version.status)}</span></div>
           <dl className="student-detail-list"><div><dt>Uploaded</dt><dd>{version.uploadedAt ? new Date(version.uploadedAt).toLocaleString() : 'Not provided'}</dd></div><div><dt>Current version</dt><dd>{version.isCurrent ? 'Yes' : 'No'}</dd></div></dl>
+          {version.feedback?.length > 0 && <section className="version-feedback" aria-label={`Feedback for version ${version.versionNumber}`}><span className="eyebrow">Mentor feedback</span>{version.feedback.map((item) => <div className="version-feedback-item" key={item.id}><p>{item.comment}</p><small>{[item.mentor?.firstName, item.mentor?.lastName].filter(Boolean).join(' ') || 'Mentor'} · {item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Date unavailable'}</small></div>)}</section>}
           <div className="version-actions">
             <button type="button" className="button button-primary" onClick={() => viewVersion(version)} disabled={!version.filePath || Boolean(activeAction)}>{activeAction === `${version.id}:view` ? 'Opening…' : 'View PDF'}</button>
             {version.status === 'DRAFT' && thesis.status === 'IN_PROGRESS' && <>
