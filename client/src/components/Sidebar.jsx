@@ -7,7 +7,7 @@ const navigation = {
     ['versions', 'Versions'], ['profile', 'Profile'],
   ],
   MENTOR: [
-    ['dashboard', 'Dashboard'], ['thesis-requests', 'Thesis Requests'], ['students', 'Students'], ['feedback', 'Feedback'],
+    ['dashboard', 'Dashboard'], ['requests', 'Mentor Requests'], ['students', 'Students'], ['feedback', 'Feedback'],
   ],
   ADMIN: [
     ['dashboard', 'Dashboard'], ['committees', 'Committees'], ['users', 'Users'], ['programs', 'Programs'],

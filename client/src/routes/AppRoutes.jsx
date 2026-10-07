@@ -5,6 +5,11 @@ import DashboardLayout from '../layouts/DashboardLayout'
 import Login from '../pages/auth/Login'
 import Register from '../pages/auth/Register'
 import { roleHomePath } from './rolePaths'
+import StudentDashboard from '../pages/student/StudentDashboard'
+import Profile from '../pages/student/Profile'
+import MentorRequests from '../pages/student/MentorRequests'
+import MentorDashboard from '../pages/mentor/MentorDashboard'
+import MentorRequestsPage from '../pages/mentor/ThesisRequests'
 
 function LoadingScreen() {
   return <div className="screen-state" role="status"><span className="spinner" />Checking your session…</div>
@@ -71,16 +76,17 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/student" element={<RequireRole role="STUDENT" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<RoleLanding />} />
-            <Route path="mentor-requests" element={<FoundationPage title="Mentor Requests" />} />
+            <Route path="dashboard" element={<StudentDashboard />} />
+            <Route path="mentor-requests" element={<MentorRequests />} />
             <Route path="thesis" element={<FoundationPage title="Thesis" />} />
             <Route path="versions" element={<FoundationPage title="Versions" />} />
-            <Route path="profile" element={<FoundationPage title="Profile" />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
           <Route path="/mentor" element={<RequireRole role="MENTOR" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<RoleLanding />} />
-            <Route path="thesis-requests" element={<FoundationPage title="Thesis Requests" />} />
+            <Route path="dashboard" element={<MentorDashboard />} />
+            <Route path="requests" element={<MentorRequestsPage />} />
+            <Route path="thesis-requests" element={<Navigate to="/mentor/requests" replace />} />
             <Route path="students" element={<FoundationPage title="Students" />} />
             <Route path="feedback" element={<FoundationPage title="Feedback" />} />
           </Route>
