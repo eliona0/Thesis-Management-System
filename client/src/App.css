@@ -219,6 +219,12 @@
 
 .mentor-theses-page { display: grid; gap: 28px; max-width: 1120px; }
 .mentor-thesis-list { display: grid; gap: 16px; }
+.mentor-list-search { display: grid; gap: 7px; max-width: 520px; color: var(--ink); font-size: 12px; font-weight: 600; }
+.mentor-list-search input { width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; }
+.mentor-feedback-card > .button { justify-self: start; }
+.mentor-student-theses { display: grid; gap: 14px; }
+.mentor-student-thesis { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid #edf0f4; }
+.mentor-student-thesis h3 { margin: 6px 0 0; color: #26384d; font-size: 15px; }
 .mentor-thesis-card { display: grid; gap: 12px; }
 .mentor-thesis-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .mentor-thesis-card-heading h2 { margin: 7px 0 0; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }

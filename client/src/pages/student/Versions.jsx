@@ -3,7 +3,15 @@ import api, { getApiErrorMessage } from '../../services/api'
 
 const formatStatus = (status) => status ? status.replaceAll('_', ' ') : 'Status unavailable'
 const hasActiveVersion = (versions) => versions.some((version) => ['DRAFT', 'SUBMITTED'].includes(version.status))
-
+const finalSubmissionDate = (startedAt) => {
+  if (!startedAt) return null
+  const date = new Date(startedAt)
+  if (Number.isNaN(date.getTime())) return null
+  const day = date.getDate()
+  date.setMonth(date.getMonth() + 3)
+  if (date.getDate() !== day) date.setDate(0)
+  return date
+}
 export default function Versions() {
   const [thesis, setThesis] = useState(null)
   const [versions, setVersions] = useState([])
@@ -152,6 +160,25 @@ export default function Versions() {
     }
   }
 
+  const submitFinalVersion = async (version) => {
+    if (version.status !== 'DRAFT' || thesis?.status !== 'IN_PROGRESS' || actionLock.current || !window.confirm('Submit this version as your final thesis submission? The version will move to SUBMITTED for mentor final approval. This is separate from Submit for Review.')) return
+    actionLock.current = true
+    setActiveAction(`${version.id}:final-submit`)
+    setActionError('')
+    setSuccess('')
+    try {
+      await api.patch(`/thesis/my-thesis/versions/${version.id}/submit-final`)
+      setSuccess('Final thesis submission sent to your mentor for final approval.')
+      await loadVersions()
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, 'Unable to submit this thesis version for final approval.'))
+      if ([400, 403, 404, 409].includes(error.response?.status)) await loadVersions()
+    } finally {
+      actionLock.current = false
+      setActiveAction('')
+    }
+  }
+
   if (loading) return <div className="screen-state" role="status"><span className="spinner" />Loading your thesis versions…</div>
   if (loadError) return <section className="state-card" role="alert"><span className="eyebrow">Versions unavailable</span><h1>We couldn’t load your versions.</h1><p>{loadError}</p><button type="button" className="button button-primary" onClick={refresh}>Try again</button></section>
 
@@ -163,6 +190,7 @@ export default function Versions() {
       <section className="student-panel" aria-labelledby="version-upload-title">
         <div className="student-panel-heading"><div><span className="eyebrow">Current thesis</span><h2 id="version-upload-title">{thesis.title || 'Untitled thesis'}</h2></div><span className="request-status">{formatStatus(thesis.status)}</span></div>
         {thesis.status !== 'IN_PROGRESS' && <p className="thesis-readonly-note">Uploading is available after your mentor moves the thesis to In Progress.</p>}
+        {thesis.status === 'IN_PROGRESS' && thesis.startedAt && finalSubmissionDate(thesis.startedAt) > new Date() && <p className="thesis-readonly-note">Final submission becomes available after {finalSubmissionDate(thesis.startedAt).toLocaleDateString()}. The backend enforces the three calendar month requirement.</p>}
         {thesis.status === 'IN_PROGRESS' && hasActiveVersion(versions) && <p className="thesis-readonly-note">A draft or submitted version is already active. You can upload another version after it is no longer active.</p>}
         {success && <p className="notice success" role="status">{success}</p>}
         {uploadError && <p className="notice error" role="alert">{uploadError}</p>}
@@ -178,11 +206,13 @@ export default function Versions() {
         {versions.length === 0 ? <div className="mentor-request-state">No thesis versions have been uploaded yet.</div> : <div className="version-list">{versions.map((version) => <article className="student-panel version-card" key={version.id}>
           <div className="version-card-heading"><div><span className="eyebrow">Version {version.versionNumber}</span><h3>{version.fileName || `Thesis version ${version.versionNumber}`}</h3></div><span className={`request-status status-${String(version.status || '').toLowerCase()}`}>{formatStatus(version.status)}</span></div>
           <dl className="student-detail-list"><div><dt>Uploaded</dt><dd>{version.uploadedAt ? new Date(version.uploadedAt).toLocaleString() : 'Not provided'}</dd></div><div><dt>Current version</dt><dd>{version.isCurrent ? 'Yes' : 'No'}</dd></div></dl>
+          {version.status === 'REVIEWED' && <p className="thesis-readonly-note">Corrections are required. Upload a new version after updating your thesis document.</p>}
           {version.feedback?.length > 0 && <section className="version-feedback" aria-label={`Feedback for version ${version.versionNumber}`}><span className="eyebrow">Mentor feedback</span>{version.feedback.map((item) => <div className="version-feedback-item" key={item.id}><p>{item.comment}</p><small>{[item.mentor?.firstName, item.mentor?.lastName].filter(Boolean).join(' ') || 'Mentor'} · {item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Date unavailable'}</small></div>)}</section>}
           <div className="version-actions">
             <button type="button" className="button button-primary" onClick={() => viewVersion(version)} disabled={!version.filePath || Boolean(activeAction)}>{activeAction === `${version.id}:view` ? 'Opening…' : 'View PDF'}</button>
             {version.status === 'DRAFT' && thesis.status === 'IN_PROGRESS' && <>
               <button type="button" className="button button-secondary" onClick={() => submitVersion(version)} disabled={Boolean(activeAction)}>{activeAction === `${version.id}:submit` ? 'Submitting…' : 'Submit for Review'}</button>
+              <button type="button" className="button button-secondary" onClick={() => submitFinalVersion(version)} disabled={Boolean(activeAction)}>{activeAction === `${version.id}:final-submit` ? 'Submitting final…' : 'Final Submission'}</button>
               <button type="button" className="button button-secondary" onClick={() => deleteVersion(version)} disabled={Boolean(activeAction)}>{activeAction === `${version.id}:delete` ? 'Deleting…' : 'Delete'}</button>
             </>}
           </div>

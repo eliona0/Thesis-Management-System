@@ -571,6 +571,31 @@ const approveFinalVersion = async (req, res) => {
   }
 };
 
+const rejectFinalVersion = async (req, res) => {
+  try {
+    const versionId = Number(req.params.versionId);
+    if (!isValidId(versionId)) return res.status(400).json({ success: false, message: "Invalid version ID" });
+    const result = await thesisService.rejectFinalThesisVersion({ mentorUserId: req.user.userId, versionId, feedback: req.body?.feedback });
+    return res.status(200).json({ success: true, message: "Final thesis version rejected for corrections", ...result });
+  } catch (error) {
+    console.error("Reject final version error:", error);
+    const errors = {
+      VERSION_NOT_FOUND: [404, "Thesis version not found"],
+      UNAUTHORIZED_VERSION: [403, "You are not authorized to reject this thesis version"],
+      THESIS_NOT_IN_PROGRESS: [409, "Thesis is not currently in progress"],
+      VERSION_NOT_SUBMITTED: [409, "Only submitted thesis versions can be rejected"],
+      VERSION_SUBMISSION_DATE_NOT_FOUND: [400, "Version submission date is not available"],
+      FINAL_EVALUATION_DEADLINE_EXCEEDED: [400, "The final evaluation deadline has passed"],
+      FINAL_REJECTION_FEEDBACK_REQUIRED: [400, "Non-empty rejection feedback is required"],
+    };
+    if (errors[error.message]) {
+      const [status, message] = errors[error.message];
+      return res.status(status).json({ success: false, code: error.message, message });
+    }
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
 const getFinalApprovalStatus = async (req, res) => {
   try {
     const mentorUserId = req.user.userId;
@@ -635,5 +660,6 @@ module.exports = {
   submitFinalVersion,
   deleteVersion,
   approveFinalVersion,
+  rejectFinalVersion,
   getFinalApprovalStatus,
 };

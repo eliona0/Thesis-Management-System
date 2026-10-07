@@ -448,6 +448,7 @@ if (thesis.mentorId !== mentorUserId) {
       status: true,
       isCurrent: true,
       uploadedAt: true,
+      submittedAt: true,
       uploader: {
         select: {
           id: true,
@@ -630,6 +631,33 @@ const approveFinalThesisVersion = async ({
   return result;
 };
 
+const rejectFinalThesisVersion = async ({ mentorUserId, versionId, feedback }) => {
+  if (typeof feedback !== "string" || !feedback.trim()) throw new Error("FINAL_REJECTION_FEEDBACK_REQUIRED");
+  const version = await prisma.thesisVersion.findUnique({ where: { id: versionId }, include: { thesis: true } });
+  if (!version) throw new Error("VERSION_NOT_FOUND");
+  if (version.thesis.mentorId !== mentorUserId) throw new Error("UNAUTHORIZED_VERSION");
+  if (version.thesis.status !== "IN_PROGRESS") throw new Error("THESIS_NOT_IN_PROGRESS");
+  if (version.status !== "SUBMITTED") throw new Error("VERSION_NOT_SUBMITTED");
+  if (!version.submittedAt) throw new Error("VERSION_SUBMISSION_DATE_NOT_FOUND");
+  const deadline = new Date(version.submittedAt);
+  deadline.setDate(deadline.getDate() + 7);
+  if (new Date() > deadline) throw new Error("FINAL_EVALUATION_DEADLINE_EXCEEDED");
+  const result = await prisma.$transaction(async (tx) => {
+    const versionLock = await tx.thesisVersion.updateMany({
+      where: { id: versionId, thesisId: version.thesisId, status: "SUBMITTED", submittedAt: version.submittedAt },
+      data: { status: "REVIEWED", reviewedAt: new Date() },
+    });
+    if (versionLock.count !== 1) throw new Error("VERSION_NOT_SUBMITTED");
+    const savedFeedback = await tx.feedback.create({ data: { versionId, mentorId: mentorUserId, comment: feedback.trim() } });
+    const [updatedVersion, thesis] = await Promise.all([
+      tx.thesisVersion.findUnique({ where: { id: versionId } }),
+      tx.thesis.findUnique({ where: { id: version.thesisId } }),
+    ]);
+    return { version: updatedVersion, thesis, feedback: savedFeedback };
+  });
+  return result;
+};
+
 const getFinalApprovalStatus = async ({
   mentorUserId,
   versionId,
@@ -683,5 +711,6 @@ module.exports = {
   submitFinalThesisVersion,
   deleteThesisVersion,
   approveFinalThesisVersion,
+  rejectFinalThesisVersion,
   getFinalApprovalStatus,
 };

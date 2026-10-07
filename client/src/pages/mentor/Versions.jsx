@@ -15,6 +15,10 @@ export default function MentorVersions() {
   const [comments, setComments] = useState({})
   const [busyId, setBusyId] = useState(null)
   const [actionError, setActionError] = useState('')
+  const [finalApprovalStatus, setFinalApprovalStatus] = useState({})
+  const [finalEvaluations, setFinalEvaluations] = useState({})
+  const [finalGrades, setFinalGrades] = useState({})
+  const [rejectionFeedback, setRejectionFeedback] = useState({})
   const actionLock = useRef(false)
 
   const loadVersions = useCallback(async () => {
@@ -32,7 +36,17 @@ export default function MentorVersions() {
         return
       }
       setThesis(assignedThesis)
-      setVersions(Array.isArray(versionsResponse.data.versions) ? versionsResponse.data.versions : [])
+      const loadedVersions = Array.isArray(versionsResponse.data.versions) ? versionsResponse.data.versions : []
+      setVersions(loadedVersions)
+      const statusPairs = await Promise.all(loadedVersions.filter((version) => version.status === 'SUBMITTED' && version.submittedAt).map(async (version) => {
+        try {
+          const { data } = await api.get(`/thesis/versions/${version.id}/final-approval-status`)
+          return [version.id, { ...data, loadingError: '' }]
+        } catch (requestError) {
+          return [version.id, { loadingError: getApiErrorMessage(requestError, 'Final approval status is unavailable.') }]
+        }
+      }))
+      setFinalApprovalStatus(Object.fromEntries(statusPairs))
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, 'Unable to load thesis versions.'))
     } finally {
@@ -93,6 +107,72 @@ export default function MentorVersions() {
     }
   }
 
+  const approveFinal = async (event, version) => {
+    event.preventDefault()
+    const status = finalApprovalStatus[version.id]
+    const gradeText = finalGrades[version.id] || ''
+    const grade = gradeText.trim() === '' ? null : Number(gradeText)
+    if (actionLock.current || version.status !== 'SUBMITTED' || thesis?.status !== 'IN_PROGRESS' || status?.available !== true) return
+    if (grade !== null && (!Number.isFinite(grade) || grade < 6 || grade > 10)) {
+      setActionError('Final grade must be a number from 6 through 10.')
+      return
+    }
+    if (!window.confirm('Approve this final thesis submission? The version will become APPROVED and the thesis will move to SUBMITTED.')) return
+    actionLock.current = true
+    setBusyId(`${version.id}:approve-final`)
+    setActionError('')
+    setNotice('')
+    try {
+      const { data } = await api.patch(`/thesis/versions/${version.id}/approve-final`, {
+        mentorFinalEvaluation: finalEvaluations[version.id]?.trim() || null,
+        finalGrade: grade,
+      })
+      if (data.thesis) setThesis((current) => ({ ...current, ...data.thesis }))
+      setNotice('Final submission approved.')
+      await loadVersions()
+    } catch (requestError) {
+      setActionError(getApiErrorMessage(requestError, 'Unable to approve this final submission.'))
+      if ([400, 403, 404, 409].includes(requestError.response?.status)) await loadVersions()
+    } finally {
+      actionLock.current = false
+      setBusyId(null)
+    }
+  }
+
+  const rejectFinal = async (event, version) => {
+    event.preventDefault()
+    const status = finalApprovalStatus[version.id]
+    const feedback = rejectionFeedback[version.id] || ''
+    if (actionLock.current || version.status !== 'SUBMITTED' || thesis?.status !== 'IN_PROGRESS' || status?.available !== true) return
+    if (!feedback.trim()) { setActionError('Rejection feedback is required.'); return }
+    if (!window.confirm('Reject this final submission? The version will become REVIEWED and the student must make corrections.')) return
+    actionLock.current = true
+    setBusyId(version.id + ':reject-final')
+    setActionError('')
+    setNotice('')
+    try {
+      await api.patch('/thesis/versions/' + version.id + '/reject-final', { feedback })
+      setNotice('Final submission rejected and returned for corrections.')
+      await loadVersions()
+    } catch (requestError) {
+      setActionError(getApiErrorMessage(requestError, 'Unable to reject this final submission.'))
+      if ([400, 403, 404, 409].includes(requestError.response?.status)) await loadVersions()
+    } finally {
+      actionLock.current = false
+      setBusyId(null)
+    }
+  }
+
+  const approvalUnavailableReason = (status) => {
+    if (status.loadingError) return status.loadingError
+    if (status.available === true) return 'A final decision is available.'
+    if (status.versionStatus && status.versionStatus !== 'SUBMITTED') return `This version is ${formatStatus(status.versionStatus)}; final approval requires SUBMITTED.`
+    if (status.thesisStatus && status.thesisStatus !== 'IN_PROGRESS') return `The thesis is ${formatStatus(status.thesisStatus)}; final approval requires IN PROGRESS.`
+    if (!status.submittedAt) return 'The backend has not recorded a submission date for this version.'
+    if (status.evaluationDeadline && new Date(status.evaluationDeadline) < new Date()) return 'The seven calendar day final approval deadline has passed.'
+    return 'The backend reports that final approval is unavailable.'
+  }
+
   if (loading) return <div className="screen-state" role="status"><span className="spinner" />Loading thesis versions…</div>
 
   return <div className="mentor-request-page">
@@ -117,7 +197,28 @@ export default function MentorVersions() {
           <dl className="student-detail-list"><div><dt>Uploaded</dt><dd>{version.uploadedAt ? new Date(version.uploadedAt).toLocaleString() : 'Not provided'}</dd></div><div><dt>Current version</dt><dd>{version.isCurrent ? 'Yes' : 'No'}</dd></div><div><dt>Uploaded by</dt><dd>{fullName(version.uploader)}{version.uploader?.email ? ` · ${version.uploader.email}` : ''}</dd></div></dl>
           <div className="version-actions"><button type="button" className="button button-primary" onClick={() => viewVersion(version)} disabled={!version.filePath || busyId !== null}>{busyId === `${version.id}:view` ? 'Opening…' : 'View PDF'}</button></div>
           {version.feedback && <div className="version-feedback"><span className="eyebrow">Feedback submitted</span><p>{version.feedback.comment}</p></div>}
-          {version.status === 'SUBMITTED' && thesis.status === 'IN_PROGRESS' && <form className="mentor-feedback-form" onSubmit={(event) => submitFeedback(event, version)}>
+          {version.status === 'APPROVED' && <section className="version-feedback" aria-label={`Final approval for version ${version.versionNumber}`}><span className="eyebrow">Final approval</span><p>Approved</p>{thesis.mentorFinalEvaluation && <p>{thesis.mentorFinalEvaluation}</p>}{thesis.finalGrade != null && <p>Final grade: {thesis.finalGrade}</p>}</section>}
+          {version.status === 'SUBMITTED' && version.submittedAt && <section className="version-feedback" aria-label={`Final approval status for version ${version.versionNumber}`}>
+            <span className="eyebrow">Final decision status</span>
+            {finalApprovalStatus[version.id] ? <>
+              <dl className="student-detail-list"><div><dt>Version status</dt><dd>{formatStatus(finalApprovalStatus[version.id].versionStatus)}</dd></div><div><dt>Thesis status</dt><dd>{formatStatus(finalApprovalStatus[version.id].thesisStatus)}</dd></div><div><dt>Submitted</dt><dd>{finalApprovalStatus[version.id].submittedAt ? new Date(finalApprovalStatus[version.id].submittedAt).toLocaleString() : 'Not recorded'}</dd></div><div><dt>Evaluation deadline</dt><dd>{finalApprovalStatus[version.id].evaluationDeadline ? new Date(finalApprovalStatus[version.id].evaluationDeadline).toLocaleString() : 'Not provided'}</dd></div><div><dt>Final approval</dt><dd>{finalApprovalStatus[version.id].available === true ? 'Available' : 'Unavailable'}</dd></div></dl>
+              {finalApprovalStatus[version.id].available !== true && <p>{approvalUnavailableReason(finalApprovalStatus[version.id])}</p>}
+            </> : <p role="status">Loading final approval status…</p>}
+          </section>}
+          {version.status === 'SUBMITTED' && version.submittedAt && finalApprovalStatus[version.id]?.available === true && thesis.status === 'IN_PROGRESS' && <><form className="mentor-feedback-form" onSubmit={(event) => approveFinal(event, version)}>
+            <span className="eyebrow">Mentor final approval</span>
+            <label htmlFor={`final-evaluation-${version.id}`}>Mentor final evaluation <span className="optional-label">(optional)</span></label>
+            <textarea id={`final-evaluation-${version.id}`} rows="4" value={finalEvaluations[version.id] || ''} onChange={(event) => setFinalEvaluations((current) => ({ ...current, [version.id]: event.target.value }))} placeholder="Add a final evaluation" disabled={busyId !== null} />
+            <label htmlFor={`final-grade-${version.id}`}>Final grade <span className="optional-label">(optional, 6–10)</span></label>
+            <input id={`final-grade-${version.id}`} type="number" min="6" max="10" step="any" value={finalGrades[version.id] || ''} onChange={(event) => setFinalGrades((current) => ({ ...current, [version.id]: event.target.value }))} disabled={busyId !== null} />
+            <button className="button button-secondary" type="submit" disabled={busyId !== null}>{busyId === `${version.id}:approve-final` ? 'Approving…' : 'Approve Final'}</button>
+          </form><form className="mentor-feedback-form" onSubmit={(event) => rejectFinal(event, version)}>
+            <span className="eyebrow">Reject final submission</span><p>Rejecting the final submission sends this version back to REVIEWED and requires the student to make corrections.</p>
+            <label htmlFor={`rejection-feedback-${version.id}`}>Required feedback</label>
+            <textarea id={`rejection-feedback-${version.id}`} rows="4" required value={rejectionFeedback[version.id] || ''} onChange={(event) => setRejectionFeedback((current) => ({ ...current, [version.id]: event.target.value }))} placeholder="Explain what needs to be corrected" disabled={busyId !== null} />
+            <button className="button button-secondary" type="submit" disabled={busyId !== null || !(rejectionFeedback[version.id] || '').trim()}>{busyId === `${version.id}:reject-final` ? 'Rejecting…' : 'Reject Final'}</button>
+          </form></>}
+          {version.status === 'SUBMITTED' && !version.submittedAt && thesis.status === 'IN_PROGRESS' && <form className="mentor-feedback-form" onSubmit={(event) => submitFeedback(event, version)}>
             <label htmlFor={`feedback-${version.id}`}>Review feedback</label>
             <textarea id={`feedback-${version.id}`} rows="4" required value={comments[version.id] || ''} onChange={(event) => setComments((current) => ({ ...current, [version.id]: event.target.value }))} placeholder="Share feedback for this submitted version" disabled={busyId !== null} />
             <button className="button button-secondary" type="submit" disabled={busyId !== null || !(comments[version.id] || '').trim()}>{busyId === `${version.id}:feedback` ? 'Submitting…' : 'Submit feedback and mark reviewed'}</button>

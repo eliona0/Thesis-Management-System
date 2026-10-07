@@ -14,6 +14,8 @@ import MentorDashboard from '../pages/mentor/MentorDashboard'
 import MentorRequestsPage from '../pages/mentor/ThesisRequests'
 import MentorTheses from '../pages/mentor/Theses'
 import MentorVersions from '../pages/mentor/Versions'
+import MentorStudents from '../pages/mentor/Students'
+import MentorFeedback from '../pages/mentor/Feedback'
 
 function LoadingScreen() {
   return <div className="screen-state" role="status"><span className="spinner" />Checking your session…</div>
@@ -93,8 +95,9 @@ export default function AppRoutes() {
             <Route path="theses" element={<MentorTheses />} />
             <Route path="theses/:thesisId/versions" element={<MentorVersions />} />
             <Route path="thesis-requests" element={<Navigate to="/mentor/requests" replace />} />
-            <Route path="students" element={<FoundationPage title="Students" />} />
-            <Route path="feedback" element={<FoundationPage title="Feedback" />} />
+            <Route path="students" element={<MentorStudents />} />
+            <Route path="feedbacks" element={<MentorFeedback />} />
+            <Route path="feedback" element={<Navigate to="/mentor/feedbacks" replace />} />
           </Route>
           <Route path="/admin" element={<RequireRole role="ADMIN" />}>
             <Route index element={<Navigate to="dashboard" replace />} />

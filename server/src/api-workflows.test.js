@@ -61,6 +61,18 @@ const prisma = {
   },
   feedback: {
     findFirst: async ({ where }) => db.feedback.find((f) => f.versionId === where.versionId) || null,
+    findMany: async ({ where }) => where.versionId
+      ? db.feedback.filter((f) => f.versionId === where.versionId).map((f) => ({ ...f, mentor: { firstName: "Mentor", lastName: "Test" } }))
+      : db.feedback.filter((f) => f.mentorId === where.mentorId).map((f) => ({
+        ...f,
+        version: {
+          ...v(f.versionId),
+          thesis: {
+            ...t(v(f.versionId).thesisId),
+            student: { id: t(v(f.versionId).thesisId).studentId, firstName: "Student", lastName: "Test", email: `student${t(v(f.versionId).thesisId).studentId}@example.test`, studentProfile: { studentNumber: `S${t(v(f.versionId).thesisId).studentId}` }, studyProgram: { name: "Computer Science" } },
+          },
+        },
+      })),
     create: async ({ data }) => { const row = { id: 700 + db.feedback.length, ...data }; db.feedback.push(row); return row; },
   },
   mentorRequest: {
@@ -173,6 +185,7 @@ test("normal review stays separate from final submission and post-approval write
   assert.equal((await api("/api/thesis/versions/1000/approve-final", { id: 3, method: "PATCH", body: { mentorFinalEvaluation: "Approved", finalGrade: 6 } })).status, 200);
   assert.equal(v(1000).status, "APPROVED"); assert.ok(v(1000).reviewedAt instanceof Date);
   assert.equal(t(100).status, "SUBMITTED"); assert.equal(t(100).finalGrade, 6); assert.ok(t(100).finalEvaluatedAt instanceof Date);
+  assert.equal((await api("/api/thesis/versions/1000/reject-final", { id: 3, method: "PATCH", body: { feedback: "No longer eligible" } })).status, 409);
   assert.equal(db.committee, null);
   assert.equal((await api("/api/thesis/my-thesis/versions/1000/submit-final", { id: 2, method: "PATCH" })).status, 400);
   assert.equal((await api("/api/thesis/my-thesis/versions/1000/submit", { id: 2, method: "PATCH" })).status, 400);
@@ -187,6 +200,27 @@ test("normal review stays separate from final submission and post-approval write
   assert.equal((await api("/api/thesis/my-thesis/versions/1010/submit-final", { id: 9, method: "PATCH" })).status, 200);
   v(1010).submittedAt = new Date();
   assert.equal((await api("/api/thesis/versions/1010/approve-final", { id: 8, method: "PATCH", body: { finalGrade: 10 } })).status, 200);
+});
+
+test("final rejection stores feedback, preserves thesis progress, and permits no duplicate decision", async () => {
+  const start = new Date(); start.setMonth(start.getMonth() - 4); t(100).startedAt = start;
+  assert.equal((await api("/api/thesis/my-thesis/versions/1000/submit-final", { id: 2, method: "PATCH" })).status, 200);
+  assert.equal((await api("/api/thesis/versions/1000/reject-final", { id: 3, method: "PATCH", body: { feedback: "   " } })).status, 400);
+  assert.equal((await api("/api/thesis/versions/1000/reject-final", { id: 8, method: "PATCH", body: { feedback: "Revise" } })).status, 403);
+  v(1000).submittedAt = new Date(Date.now() - 8 * 86400000);
+  assert.equal((await api("/api/thesis/versions/1000/reject-final", { id: 3, method: "PATCH", body: { feedback: "Revise" } })).json.code, "FINAL_EVALUATION_DEADLINE_EXCEEDED");
+  v(1000).submittedAt = new Date();
+  const rejected = await api("/api/thesis/versions/1000/reject-final", { id: 3, method: "PATCH", body: { feedback: "Please correct the methodology." } });
+  assert.equal(rejected.status, 200);
+  assert.equal(rejected.json.version.status, "REVIEWED");
+  assert.equal(t(100).status, "IN_PROGRESS");
+  assert.equal(rejected.json.feedback.comment, "Please correct the methodology.");
+  assert.equal((await api("/api/thesis/versions/1000/approve-final", { id: 3, method: "PATCH" })).status, 400);
+  assert.equal((await api("/api/thesis/versions/1000/reject-final", { id: 3, method: "PATCH", body: { feedback: "Again" } })).status, 409);
+  assert.equal((await api("/api/thesis/versions/1000/final-approval-status", { id: 3 })).json.available, false);
+  const visible = await api("/api/feedback/my-version/1000", { id: 2 });
+  assert.equal(visible.status, 200);
+  assert.equal(visible.json.feedback[0].comment, "Please correct the methodology.");
 });
 
 test("invalid thesis uploads receive a safe API error", async () => {
@@ -248,6 +282,22 @@ test("mentor thesis listing is authenticated, role-restricted, and scoped to the
   assert.deepEqual((await api("/api/mentor/theses", { id: 8 })).json.theses.map((thesis) => thesis.id), [200, 101]);
   assert.deepEqual((await api("/api/mentor/theses", { id: 12 })).json, { success: true, theses: [] });
 });
+
+test("mentor feedback history is authenticated, role-restricted, and scoped to the current mentor", async () => {
+  assert.equal((await api("/api/mentor/feedbacks")).status, 401);
+  for (const id of [1, 2, 4]) assert.equal((await api("/api/mentor/feedbacks", { id })).status, 403);
+  db.feedback.push(
+    { id: 1, mentorId: 3, versionId: 1000, comment: "Improve the analysis", createdAt: new Date() },
+    { id: 2, mentorId: 8, versionId: 1010, comment: "Other mentor note", createdAt: new Date() },
+  );
+  const own = await api("/api/mentor/feedbacks?mentorId=8", { id: 3 });
+  assert.equal(own.status, 200);
+  assert.deepEqual(own.json.feedback.map((item) => item.id), [1]);
+  assert.equal(own.json.feedback[0].version.thesis.student.studentProfile.studentNumber, "S2");
+  assert.deepEqual((await api("/api/mentor/feedbacks", { id: 8 })).json.feedback.map((item) => item.id), [2]);
+  assert.deepEqual((await api("/api/mentor/feedbacks", { id: 12 })).json, { success: true, feedback: [] });
+});
+
 test("mentor request accept, reject, ownership and self-accept transitions are enforced", async () => {
   assert.equal((await api("/api/mentor/requests/57/accept", { id: 8, method: "PATCH" })).status, 403);
   assert.equal((await api("/api/mentor/requests/58/accept", { id: 3, method: "PATCH" })).status, 403);

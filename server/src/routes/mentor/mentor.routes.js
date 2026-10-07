@@ -6,6 +6,7 @@ const {
   rejectMentorRequest,
 } = require("../../controllers/mentorRequest.controller");
 const { getProfile, getTheses } = require("../../controllers/mentor.controller");
+const { getMentorFeedback } = require("../../controllers/feedback.controller");
 
 const { authenticate } = require("../../middleware/auth.middleware");
 const { requireRole } = require("../../middleware/role.middleware");
@@ -14,6 +15,7 @@ const router = express.Router();
 
 router.get("/profile", authenticate, requireRole("MENTOR"), getProfile);
 router.get("/theses", authenticate, requireRole("MENTOR"), getTheses);
+router.get("/feedbacks", authenticate, requireRole("MENTOR"), getMentorFeedback);
 
 router.get(
   "/requests",

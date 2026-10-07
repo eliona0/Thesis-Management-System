@@ -12,6 +12,7 @@ const {
   submitFinalVersion,
   deleteVersion,
   approveFinalVersion,
+  rejectFinalVersion,
   getFinalApprovalStatus,
 } = require("../../controllers/thesis.controller");
 
@@ -105,6 +106,13 @@ router.patch(
   authenticate,
   requireRole("MENTOR"),
   approveFinalVersion
+);
+
+router.patch(
+  "/versions/:versionId/reject-final",
+  authenticate,
+  requireRole("MENTOR"),
+  rejectFinalVersion
 );
 
 router.get(

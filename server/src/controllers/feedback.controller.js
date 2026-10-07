@@ -111,7 +111,18 @@ const getMyVersionFeedback = async (req, res) => {
   }
 };
 
+const getMentorFeedback = async (req, res) => {
+  try {
+    const feedback = await feedbackService.getMentorFeedback(req.user.userId);
+    return res.status(200).json({ success: true, feedback });
+  } catch (error) {
+    console.error("Get mentor feedback error:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
 module.exports = {
   createFeedback,
   getMyVersionFeedback,
+  getMentorFeedback,
 };

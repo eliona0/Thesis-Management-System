@@ -115,7 +115,42 @@ const getStudentFeedback = async ({
   return feedback;
 };
 
+const getMentorFeedback = async (mentorUserId) => prisma.feedback.findMany({
+  where: { mentorId: mentorUserId },
+  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  select: {
+    id: true,
+    comment: true,
+    createdAt: true,
+    version: {
+      select: {
+        id: true,
+        versionNumber: true,
+        uploadedAt: true,
+        submittedAt: true,
+        thesis: {
+          select: {
+            id: true,
+            title: true,
+            student: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                studentProfile: { select: { studentNumber: true } },
+                studyProgram: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
 module.exports = {
   createFeedback,
   getStudentFeedback,
+  getMentorFeedback,
 };
