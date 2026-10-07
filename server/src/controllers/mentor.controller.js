@@ -1,5 +1,38 @@
 const prisma = require("../config/prisma");
 
+const getTheses = async (req, res) => {
+  try {
+    const theses = await prisma.thesis.findMany({
+      where: { mentorId: req.user.userId },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        researchField: true,
+        status: true,
+        startedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            studentProfile: { select: { studentNumber: true } },
+            studyProgram: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    return res.status(200).json({ success: true, theses });
+  } catch (error) {
+    console.error("Get mentor theses error:", error);
+    return res.status(500).json({ success: false, message: "Something went wrong" });
+  }
+};
+
 const getProfile = async (req, res) => {
   try {
     const profile = await prisma.mentorProfile.findUnique({
@@ -37,4 +70,4 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { getProfile };
+module.exports = { getProfile, getTheses };

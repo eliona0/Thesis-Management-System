@@ -216,3 +216,45 @@
 @media (max-width: 760px) { .mentor-confirm-panel { grid-template-columns: 1fr; gap: 12px; } .request-row { grid-template-columns: minmax(0, 1fr) auto; } .request-row-meta { grid-column: 1 / -1; grid-row: 2; } .request-status { grid-column: 2; grid-row: 1; } }
 @media (max-width: 900px) { .mentor-request-row { grid-template-columns: minmax(0, 1fr) auto; } .mentor-request-row .request-person { grid-column: 1; grid-row: 1; } .mentor-request-row .request-status { grid-column: 2; grid-row: 1; } .mentor-request-row .request-row-meta { grid-column: 1 / -1; grid-row: 2; } .mentor-request-actions { grid-column: 1 / -1; grid-row: 3; } }
 @media (max-width: 480px) { .mentor-request-section-heading { align-items: flex-start; flex-direction: column; } .mentor-card-grid { grid-template-columns: 1fr; } .mentor-confirm-panel { padding: 18px; } .mentor-form-actions { flex-wrap: wrap; } .request-row { gap: 11px; padding: 14px; } }
+
+.mentor-theses-page { display: grid; gap: 28px; max-width: 1120px; }
+.mentor-thesis-list { display: grid; gap: 16px; }
+.mentor-thesis-card { display: grid; gap: 12px; }
+.mentor-thesis-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.mentor-thesis-card-heading h2 { margin: 7px 0 0; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
+.mentor-thesis-card-heading .request-status { flex: 0 0 auto; }
+.mentor-thesis-description { margin: 0; white-space: pre-wrap; }
+.mentor-thesis-details { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; margin-top: 0; }
+.mentor-thesis-details > div { justify-content: space-between; }
+.mentor-thesis-actions { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 6px; }
+.mentor-thesis-actions .button { min-height: 40px; }
+.mentor-thesis-status-note { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid #edf0f4; color: #47637f !important; font-weight: 600; }
+.status-in_progress, .status-approved { background: #eff8f2; color: #39734c; }
+.status-submitted, .status-under_evaluation { background: #eef4fa; color: #345c83; }
+.status-completed { background: #eaf5f0; color: #2e6b52; }
+.mentor-dialog-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(20, 35, 52, .45); }
+.mentor-reject-dialog { width: min(100%, 480px); padding: 26px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 24px 70px rgba(16, 37, 60, .2); }
+.mentor-reject-dialog h2 { margin: 8px 0; color: var(--ink); font-size: 22px; }
+.mentor-reject-dialog > p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.mentor-reject-form { display: grid; gap: 10px; margin-top: 18px; }
+.mentor-reject-form label { color: var(--ink); font-size: 13px; font-weight: 600; }
+.mentor-reject-form textarea { width: 100%; padding: 11px 12px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; }
+.mentor-rejection-disclaimer { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+@media (max-width: 640px) { .mentor-thesis-details { grid-template-columns: 1fr; } .mentor-thesis-card-heading { flex-direction: column; } .mentor-thesis-card-heading .request-status { justify-self: start; } .mentor-thesis-actions .button { flex: 1 1 100%; } .mentor-reject-dialog { padding: 20px; } }
+.version-upload-form { display: grid; justify-items: start; gap: 7px; margin-top: 18px; }
+.version-upload-form .field { max-width: 520px; }
+.version-upload-form input[type="file"] { height: auto; padding: 10px; }
+.version-upload-help { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.version-section { display: grid; gap: 16px; }
+.version-section h2 { margin: 7px 0 0; color: var(--ink); font-family: Manrope, 'Segoe UI', sans-serif; font-size: 22px; }
+.version-list { display: grid; gap: 12px; }
+.version-card { display: grid; gap: 12px; }
+.version-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.version-card-heading h3 { margin: 7px 0 0; color: #26384d; font-size: 15px; overflow-wrap: anywhere; }
+.version-card .student-detail-list { margin-top: 0; }
+.version-card .student-detail-list > div { justify-content: flex-start; }
+.version-card .student-detail-list dt { width: 110px; flex: 0 0 auto; }
+.status-draft { background: #fff6e7; color: #94630e; }
+.status-submitted { background: #eef4fa; color: #345c83; }
+.status-approved { background: #eff8f2; color: #39734c; }
+@media (max-width: 520px) { .version-card-heading { flex-direction: column; } }

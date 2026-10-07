@@ -9,7 +9,7 @@ process.env.JWT_SECRET = "workflow-test-secret";
 console.error = () => {};
 
 const setup = () => ({
-  users: new Map([[1, ["ADMIN", true]], [2, ["STUDENT", true]], [3, ["MENTOR", true]], [4, ["COMMITTEE_MEMBER", true]], [5, ["COMMITTEE_MEMBER", true]], [6, ["COMMITTEE_MEMBER", true]], [7, ["COMMITTEE_MEMBER", true]], [8, ["MENTOR", true]], [9, ["STUDENT", true]], [10, ["STUDENT", true]], [11, ["STUDENT", true]]]),
+  users: new Map([[1, ["ADMIN", true]], [2, ["STUDENT", true]], [3, ["MENTOR", true]], [4, ["COMMITTEE_MEMBER", true]], [5, ["COMMITTEE_MEMBER", true]], [6, ["COMMITTEE_MEMBER", true]], [7, ["COMMITTEE_MEMBER", true]], [8, ["MENTOR", true]], [9, ["STUDENT", true]], [10, ["STUDENT", true]], [11, ["STUDENT", true]], [12, ["MENTOR", true]]]),
   theses: new Map([[100, { id: 100, studentId: 2, mentorId: 3, title: "Bachelor", status: "IN_PROGRESS", startedAt: new Date() }], [101, { id: 101, studentId: 9, mentorId: 8, title: "Grade 10", status: "IN_PROGRESS", startedAt: new Date() }], [200, { id: 200, studentId: 9, mentorId: 8, title: "Committee", status: "SUBMITTED", startedAt: new Date() }], [300, { id: 300, studentId: 10, mentorId: 3, title: "Draft proposal", status: "PENDING", startedAt: null }]]),
   versions: new Map([[1000, { id: 1000, thesisId: 100, versionNumber: 2, status: "DRAFT", isCurrent: true, submittedAt: null }], [1001, { id: 1001, thesisId: 100, versionNumber: 1, status: "DRAFT", isCurrent: false, submittedAt: null }], [1010, { id: 1010, thesisId: 101, versionNumber: 1, status: "DRAFT", isCurrent: true, submittedAt: null }]]),
   profiles: [...[101, 102, 103, 104].map((id, i) => ({ id, userId: i + 4, isActive: true })), { id: 105, userId: 99, isActive: false }],
@@ -26,6 +26,7 @@ const prisma = {
   user: { findUnique: async ({ where }) => { const user = db.users.get(where.id); return user && { id: where.id, isActive: user[1], role: { name: user[0] } }; } },
   thesis: {
     findUnique: async ({ where, include }) => { const row = t(where.id); return row && (include?.committee ? { ...row, committee: db.committee?.thesisId === row.id ? db.committee : null } : row); },
+    findMany: async ({ where, orderBy, select }) => [...db.theses.values()].filter((row) => row.mentorId === where.mentorId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || b.id - a.id).map((row) => ({ ...row, student: { id: row.studentId, firstName: "Student", lastName: "Test", email: `student${row.studentId}@example.test`, studentProfile: { studentNumber: `S${row.studentId}` }, studyProgram: { id: 1, name: "Computer Science" } } })),
     findFirst: async ({ where }) => [...db.theses.values()].find((row) => row.studentId === where.studentId && (!where.status?.in || where.status.in.includes(row.status))) || null,
     updateMany: async ({ where, data }) => { const row = t(where.id); if (!row || row.status !== where.status || (where.mentorId && row.mentorId !== where.mentorId)) return { count: 0 }; Object.assign(row, data); return { count: 1 }; },
     create: async ({ data }) => { const id = Math.max(...db.theses.keys()) + 1; const row = { id, ...data, startedAt: null }; db.theses.set(id, row); return row; },
@@ -235,6 +236,18 @@ test("students can cancel only their own pending mentor request", async () => {
   assert.equal((await api("/api/mentor-requests/55/cancel", { id: 2, method: "PATCH" })).status, 409);
 });
 
+test("mentor thesis listing is authenticated, role-restricted, and scoped to the current mentor", async () => {
+  assert.equal((await api("/api/mentor/theses")).status, 401);
+  for (const id of [1, 2, 4]) assert.equal((await api("/api/mentor/theses", { id })).status, 403);
+  const own = await api("/api/mentor/theses", { id: 3 });
+  assert.equal(own.status, 200);
+  assert.deepEqual(own.json.theses.map((thesis) => thesis.id), [300, 100]);
+  assert.equal(own.json.theses[0].student.studentProfile.studentNumber, "S10");
+  assert.equal(JSON.stringify(own.json).includes("passwordHash"), false);
+  assert.deepEqual((await api("/api/mentor/theses?mentorId=8", { id: 3 })).json.theses.map((thesis) => thesis.id), [300, 100]);
+  assert.deepEqual((await api("/api/mentor/theses", { id: 8 })).json.theses.map((thesis) => thesis.id), [200, 101]);
+  assert.deepEqual((await api("/api/mentor/theses", { id: 12 })).json, { success: true, theses: [] });
+});
 test("mentor request accept, reject, ownership and self-accept transitions are enforced", async () => {
   assert.equal((await api("/api/mentor/requests/57/accept", { id: 8, method: "PATCH" })).status, 403);
   assert.equal((await api("/api/mentor/requests/58/accept", { id: 3, method: "PATCH" })).status, 403);
