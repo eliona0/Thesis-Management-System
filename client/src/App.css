@@ -144,6 +144,14 @@
 .student-workflow { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .student-workflow h2 { margin-bottom: 4px; }
 .student-workflow p { margin: 0; }
+.thesis-edit-form { display: grid; gap: 10px; margin-top: 20px; }
+.thesis-edit-form label { color: var(--ink); font-size: 13px; font-weight: 600; }
+.thesis-edit-form input, .thesis-edit-form textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; }
+.thesis-edit-form textarea { resize: vertical; }
+.thesis-form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.thesis-form-error { margin: 4px 0; color: #b42318 !important; }
+.thesis-readonly-note { margin-top: 18px; padding-top: 14px; border-top: 1px solid #edf0f4; }
+.thesis-detail-list dd { max-width: 70%; white-space: pre-wrap; }
 .workflow-pill { flex: 0 0 auto; padding: 9px 12px; border: 1px solid var(--line); border-radius: 20px; color: #506176; background: #f8fafc; font-size: 11px; font-weight: 700; text-transform: capitalize; }
 .profile-card { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 18px; }
 .profile-card > div:nth-child(2) h2 { margin-bottom: 3px; }

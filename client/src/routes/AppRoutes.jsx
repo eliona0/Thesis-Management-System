@@ -8,6 +8,7 @@ import { roleHomePath } from './rolePaths'
 import StudentDashboard from '../pages/student/StudentDashboard'
 import Profile from '../pages/student/Profile'
 import MentorRequests from '../pages/student/MentorRequests'
+import Thesis from '../pages/student/Thesis'
 import MentorDashboard from '../pages/mentor/MentorDashboard'
 import MentorRequestsPage from '../pages/mentor/ThesisRequests'
 
@@ -78,7 +79,7 @@ export default function AppRoutes() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
             <Route path="mentor-requests" element={<MentorRequests />} />
-            <Route path="thesis" element={<FoundationPage title="Thesis" />} />
+            <Route path="thesis" element={<Thesis />} />
             <Route path="versions" element={<FoundationPage title="Versions" />} />
             <Route path="profile" element={<Profile />} />
           </Route>
