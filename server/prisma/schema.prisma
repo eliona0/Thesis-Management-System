@@ -300,6 +300,7 @@ model Committee {
   assignedDate DateTime        @default(now())
   defenseDate  DateTime?
   status       CommitteeStatus @default(ASSIGNED)
+  finalGrade   Decimal?        @db.Decimal(4, 2)
   createdAt    DateTime        @default(now())
 
   thesis  Thesis            @relation(fields: [thesisId], references: [id], onDelete: Cascade)

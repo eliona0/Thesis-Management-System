@@ -179,7 +179,7 @@ const getMyCommittees = async (userId) => {
       role: true,
       committee: {
         select: {
-          id: true, status: true, defenseDate: true,
+          id: true, status: true, defenseDate: true, finalGrade: true,
           thesis: {
             select: {
               id: true, title: true, description: true, researchField: true, status: true,
@@ -195,15 +195,66 @@ const getMyCommittees = async (userId) => {
     select: { id: true, thesisId: true, grade: true, comments: true, evaluationDate: true },
   });
   const evaluationByThesis = new Map(evaluations.map((evaluation) => [evaluation.thesisId, evaluation]));
-  return memberships.map(({ committee, ...membership }) => ({
-    committee: {
-      id: committee.id,
-      status: committee.status,
-      defenseDate: committee.defenseDate,
+  const evaluationCounts = await prisma.evaluation.findMany({
+    where: { thesisId: { in: memberships.map(({ committee }) => committee.thesis.id) } },
+    select: { thesisId: true },
+  });
+  const countByThesis = new Map();
+  for (const evaluation of evaluationCounts) countByThesis.set(evaluation.thesisId, (countByThesis.get(evaluation.thesisId) || 0) + 1);
+  return Promise.all(memberships.map(async ({ committee, ...membership }) => {
+    const evaluationCount = countByThesis.get(committee.thesis.id) || 0;
+    const result = {
+      committee: { id: committee.id, status: committee.status, defenseDate: committee.defenseDate, finalGrade: committee.finalGrade },
+      thesis: committee.thesis,
+      member: { id: profile.id, role: membership.role },
+      evaluation: evaluationByThesis.get(committee.thesis.id) || null,
+      evaluationCount,
+    };
+    if (membership.role === "CHAIR" && committee.status === "SCHEDULED" && evaluationCount === 3) {
+      const committeeEvaluations = await prisma.evaluation.findMany({
+        where: { thesisId: committee.thesis.id },
+        include: { committeeMember: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } },
+      });
+      const grades = committeeEvaluations.map((evaluation) => Number(evaluation.grade));
+      result.committeeEvaluations = committeeEvaluations;
+      result.gradesAgree = grades.length === 3 && grades.every((grade) => grade === grades[0]);
+      result.agreedGrade = result.gradesAgree ? grades[0] : null;
+    }
+    return result;
+  }));
+};
+
+const getMyDashboard = async (userId) => {
+  const profile = await prisma.committeeMemberProfile.findUnique({ where: { userId }, select: { id: true } });
+  if (!profile) return [];
+  const memberships = await prisma.committeeMember.findMany({
+    where: { committeeMemberId: profile.id },
+    orderBy: { committee: { assignedDate: "desc" } },
+    select: {
+      id: true, role: true,
+      committee: { select: {
+        id: true, status: true, defenseDate: true,
+        thesis: { select: { id: true, title: true, status: true, student: { select: { firstName: true, lastName: true } } } },
+        members: { select: { role: true, member: { select: { user: { select: { firstName: true, lastName: true } } } } } },
+      } },
     },
+  });
+  const thesisIds = memberships.map(({ committee }) => committee.thesis.id);
+  if (!thesisIds.length) return [];
+  const [ownEvaluations, counts] = await Promise.all([
+    prisma.evaluation.findMany({ where: { committeeMemberId: profile.id, thesisId: { in: thesisIds } }, select: { thesisId: true } }),
+    prisma.evaluation.findMany({ where: { thesisId: { in: thesisIds } }, select: { thesisId: true } }),
+  ]);
+  const own = new Set(ownEvaluations.map(({ thesisId }) => thesisId));
+  const countByThesis = new Map();
+  for (const { thesisId } of counts) countByThesis.set(thesisId, (countByThesis.get(thesisId) || 0) + 1);
+  return memberships.map(({ committee, role }) => ({
+    committee: { id: committee.id, status: committee.status, defenseDate: committee.defenseDate },
     thesis: committee.thesis,
-    member: { id: profile.id, role: membership.role },
-    evaluation: evaluationByThesis.get(committee.thesis.id) || null,
+    role,
+    members: committee.members.map(({ role: memberRole, member }) => ({ role: memberRole, name: [member.user.firstName, member.user.lastName].filter(Boolean).join(" ") })),
+    evaluationCount: countByThesis.get(committee.thesis.id) || 0,
+    evaluationSubmitted: own.has(committee.thesis.id),
   }));
 };
 
@@ -298,23 +349,40 @@ const createEvaluation = async ({ committeeMemberUserId, thesisId, grade, commen
         where: { thesisId: normalizedThesisId, committeeMemberId: { in: assignedMemberIds } },
         select: { id: true },
       });
-      if (assignedMemberIds.length === 3 && evaluations.length === assignedMemberIds.length) {
-        const completed = await tx.committee.updateMany({
-          where: { id: committee.id, status: "SCHEDULED" },
-          data: { status: "COMPLETED" },
-        });
-        if (completed.count !== 1) throw new Error("COMMITTEE_INVALID_TRANSITION");
-        await tx.thesis.updateMany({
-          where: { id: normalizedThesisId, status: "SUBMITTED" },
-          data: { status: "COMPLETED" },
-        });
-      }
-      return { evaluation, committeeStatus: evaluations.length === committee.members.length ? "COMPLETED" : "SCHEDULED" };
+      return { evaluation, evaluationCount: evaluations.length, committeeStatus: "SCHEDULED" };
     });
   } catch (error) {
     if (error.code === "P2002") throw new Error("EVALUATION_ALREADY_EXISTS");
     throw error;
   }
+};
+
+const confirmFinalDecision = async ({ committeeMemberUserId, thesisId, finalGrade }) => {
+  const normalizedThesisId = Number(thesisId);
+  const grade = Number(finalGrade);
+  if (!Number.isSafeInteger(normalizedThesisId) || normalizedThesisId <= 0) throw new Error("INVALID_THESIS_ID");
+  if (finalGrade === undefined || finalGrade === null || finalGrade === "" || !Number.isFinite(grade) || grade < 6 || grade > 10 || Math.abs(grade * 100 - Math.round(grade * 100)) > 1e-8) throw new Error("INVALID_GRADE");
+
+  const profile = await prisma.committeeMemberProfile.findUnique({ where: { userId: committeeMemberUserId }, select: { id: true } });
+  if (!profile) throw new Error("COMMITTEE_MEMBER_NOT_FOUND");
+  const committee = await prisma.committee.findUnique({ where: { thesisId: normalizedThesisId }, include: { members: true } });
+  if (!committee) throw new Error("COMMITTEE_NOT_FOUND");
+  if (committee.status !== "SCHEDULED") throw new Error("COMMITTEE_NOT_SCHEDULED");
+  const chair = committee.members.filter((member) => member.role === "CHAIR");
+  if (chair.length !== 1 || chair[0].committeeMemberId !== profile.id) throw new Error("UNAUTHORIZED_COMMITTEE_CHAIR");
+  const evaluations = await prisma.evaluation.findMany({ where: { thesisId: normalizedThesisId, committeeMemberId: { in: committee.members.map((member) => member.committeeMemberId) } }, select: { grade: true } });
+  if (committee.members.length !== 3 || evaluations.length !== 3) throw new Error("EVALUATIONS_INCOMPLETE");
+  const grades = evaluations.map((evaluation) => Number(evaluation.grade));
+  const agreed = grades.every((candidate) => candidate === grades[0]);
+  if (agreed && grade !== grades[0]) throw new Error("AGREED_GRADE_MISMATCH");
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.committee.updateMany({ where: { id: committee.id, status: "SCHEDULED", finalGrade: null }, data: { status: "COMPLETED", finalGrade: grade } });
+    if (updated.count !== 1) throw new Error("COMMITTEE_INVALID_TRANSITION");
+    const thesis = await tx.thesis.updateMany({ where: { id: normalizedThesisId, status: "SUBMITTED" }, data: { status: "COMPLETED" } });
+    if (thesis.count !== 1) throw new Error("THESIS_INVALID_TRANSITION");
+    return { finalGrade: grade, committeeStatus: "COMPLETED", thesisStatus: "COMPLETED" };
+  });
 };
 
 module.exports = {
@@ -324,6 +392,8 @@ module.exports = {
   getAdminCommittees,
   getCommitteeMembers,
   getMyCommittees,
+  getMyDashboard,
   scheduleDefense,
   createEvaluation,
+  confirmFinalDecision,
 };

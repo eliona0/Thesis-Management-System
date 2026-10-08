@@ -256,6 +256,16 @@ const getMyCommittees = async (req, res) => {
   }
 };
 
+const getMyDashboard = async (req, res) => {
+  try {
+    const assignments = await committeeService.getMyDashboard(req.user.userId);
+    return res.status(200).json({ success: true, assignments });
+  } catch (error) {
+    console.error("Get Committee Member dashboard error:", error);
+    return res.status(500).json({ success: false, message: "Unable to load Committee dashboard" });
+  }
+};
+
 const createEvaluation = async (req, res) => {
   try {
     const result = await committeeService.createEvaluation({
@@ -291,6 +301,31 @@ const createEvaluation = async (req, res) => {
   }
 };
 
+const confirmFinalDecision = async (req, res) => {
+  try {
+    const result = await committeeService.confirmFinalDecision({
+      committeeMemberUserId: req.user.userId,
+      thesisId: req.params.thesisId,
+      finalGrade: req.body?.finalGrade,
+    });
+    return res.status(200).json({ success: true, message: "Final decision confirmed", ...result });
+  } catch (error) {
+    console.error("Confirm Committee final decision error:", error);
+    const errors = {
+      INVALID_THESIS_ID: [400, "Invalid thesis ID"], INVALID_GRADE: [400, "Final grade must be between 6 and 10"],
+      COMMITTEE_MEMBER_NOT_FOUND: [404, "Committee member profile not found"], COMMITTEE_NOT_FOUND: [404, "Committee not found"],
+      COMMITTEE_NOT_SCHEDULED: [409, "Committee is not awaiting a final decision"], UNAUTHORIZED_COMMITTEE_CHAIR: [403, "Only the assigned Chair may confirm the final decision"],
+      EVALUATIONS_INCOMPLETE: [409, "All three Committee evaluations are required"], AGREED_GRADE_MISMATCH: [400, "The confirmed grade must match the unanimous evaluation"],
+      COMMITTEE_INVALID_TRANSITION: [409, "Committee final decision has already been recorded"], THESIS_INVALID_TRANSITION: [409, "Thesis is not eligible for completion"],
+    };
+    if (errors[error.message]) {
+      const [status, message] = errors[error.message];
+      return res.status(status).json({ success: false, message });
+    }
+    return res.status(500).json({ success: false, message: "Something went wrong while confirming the final decision" });
+  }
+};
+
 module.exports = {
   assignCommittee,
   getCommittee,
@@ -298,6 +333,8 @@ module.exports = {
   getEligibleTheses,
   getAdminCommittees,
   getMyCommittees,
+  getMyDashboard,
   scheduleDefense,
   createEvaluation,
+  confirmFinalDecision,
 };

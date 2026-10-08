@@ -23,10 +23,16 @@ const v = (id) => db.versions.get(id) || null;
 const profileFor = (where) => db.profiles.find((p) => where.userId ? p.userId === where.userId : p.id === where.id) || null;
 const committeeRows = () => db.committee?.members.map((m) => ({ ...m, member: { user: { id: m.committeeMemberId - 97, firstName: "Member", lastName: "Test", email: "member@example.test", isActive: true } } })) || [];
 const prisma = {
-  user: { findUnique: async ({ where }) => { const user = db.users.get(where.id); return user && { id: where.id, isActive: user[1], role: { name: user[0] } }; } },
+  user: {
+    findUnique: async ({ where }) => { const user = db.users.get(where.id); return user && { id: where.id, isActive: user[1], role: { name: user[0] } }; },
+    update: async ({ where, data, select }) => { const user = db.users.get(where.id); if (!user) return null; db.users.set(where.id, [user[0], data.isActive]); return { id: where.id, isActive: data.isActive }; },
+    findMany: async ({ select } = {}) => select?.role && Object.keys(select).length === 1
+      ? [...db.users.values()].map(([name]) => ({ role: { name } }))
+      : [{ id: 1, firstName: "Admin", lastName: "Test", email: "admin@example.test", isActive: true, createdAt: new Date("2025-01-01"), role: { name: "ADMIN" }, studyProgram: null }],
+  },
   thesis: {
     findUnique: async ({ where, include }) => { const row = t(where.id); return row && (include?.committee ? { ...row, committee: db.committee?.thesisId === row.id ? db.committee : null } : row); },
-    findMany: async ({ where, orderBy, select }) => [...db.theses.values()].filter((row) => where.status ? row.status === where.status && db.committee?.thesisId !== row.id : row.mentorId === where.mentorId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || b.id - a.id).map((row) => ({ ...row, student: { id: row.studentId, firstName: "Student", lastName: "Test", email: `student${row.studentId}@example.test`, studentProfile: { studentNumber: `S${row.studentId}` }, studyProgram: { id: 1, name: "Computer Science" } } })),
+    findMany: async ({ where = {}, orderBy, select }) => [...db.theses.values()].filter((row) => where.status ? row.status === where.status && db.committee?.thesisId !== row.id : Object.keys(where).length === 0 || row.mentorId === where.mentorId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || b.id - a.id).map((row) => ({ ...row, student: { id: row.studentId, firstName: "Student", lastName: "Test", email: `student${row.studentId}@example.test`, studentProfile: { studentNumber: `S${row.studentId}` }, studyProgram: { id: 1, name: "Computer Science" } } })),
     findFirst: async ({ where }) => [...db.theses.values()].find((row) => row.studentId === where.studentId && (!where.status?.in || where.status.in.includes(row.status))) || null,
     updateMany: async ({ where, data }) => { const row = t(where.id); if (!row || row.status !== where.status || (where.mentorId && row.mentorId !== where.mentorId)) return { count: 0 }; Object.assign(row, data); return { count: 1 }; },
     create: async ({ data }) => { const id = Math.max(...db.theses.keys()) + 1; const row = { id, ...data, startedAt: null }; db.theses.set(id, row); return row; },
@@ -41,24 +47,32 @@ const prisma = {
     findUnique: async ({ where }) => profileFor(where),
     findMany: async ({ where }) => db.profiles.filter((p) => where.id ? where.id.in.includes(p.id) : p.isActive).map((p) => ({ ...p, userId: p.userId, academicTitle: null, specialization: null, department: null, user: { isActive: p.isActive, firstName: "Member", lastName: "Test", email: "member@example.test", role: { name: db.users.get(p.userId)?.[0] || "COMMITTEE_MEMBER" } } })),
   },
-  studyProgram: { findMany: async ({ where }) => db.studyPrograms.filter((p) => p.status === where.status).map(({ id, name }) => ({ id, name })) },
+  studyProgram: {
+    findMany: async ({ where }) => where?.status ? db.studyPrograms.filter((p) => p.status === where.status).map(({ id, name }) => ({ id, name })) : db.studyPrograms.map((program) => ({ ...program, department: null, degreeLevel: null, createdAt: new Date("2025-01-01"), _count: { users: 1 } })),
+    count: async () => db.studyPrograms.length,
+    create: async ({ data }) => { const program = { id: Math.max(...db.studyPrograms.map((item) => item.id)) + 1, status: "ACTIVE", ...data }; db.studyPrograms.push(program); return program; },
+    findUnique: async ({ where }) => db.studyPrograms.find((item) => item.id === where.id) || null,
+    update: async ({ where, data }) => { const program = db.studyPrograms.find((item) => item.id === where.id); Object.assign(program, data); return program; },
+  },
   mentorProfile: { findUnique: async ({ where }) => db.mentors.find((m) => where.userId ? m.userId === where.userId : m.id === where.id) || null },
   committee: {
     create: async ({ data }) => (db.committee = { id: 800, thesisId: data.thesisId, status: data.status, assignedDate: new Date(), defenseDate: null, members: data.members.create.map((m, i) => ({ id: i + 1, ...m })) }),
     findUnique: async ({ where, include }) => { const row = db.committee && (where.id ? db.committee.id === where.id : db.committee.thesisId === where.thesisId) ? db.committee : null; return row && (include?.members ? { ...row, members: committeeRows() } : row); },
     findMany: async () => db.committee ? [{ ...db.committee, thesis: { ...t(db.committee.thesisId), student: { id: 9, firstName: "Student", lastName: "Test", email: "student@example.test" }, evaluations: db.evaluations.map((evaluation) => ({ ...evaluation, committeeMember: { user: { id: evaluation.committeeMemberId + 3, firstName: "Member", lastName: "Test", email: "member@example.test" } } })) }, members: committeeRows() }] : [],
+    count: async () => db.committee?.status === "SCHEDULED" && db.committee.defenseDate > new Date() ? 1 : 0,
     updateMany: async ({ where, data }) => { if (!db.committee || db.committee.id !== where.id || db.committee.status !== where.status) return { count: 0 }; Object.assign(db.committee, data); return { count: 1 }; },
   },
   committeeMember: {
     findMany: async ({ where }) => db.committee?.members.filter((m) => m.committeeMemberId === where.committeeMemberId).map((m) => ({
       id: m.id, role: m.role,
       committee: { id: db.committee.id, status: db.committee.status, defenseDate: db.committee.defenseDate,
-        thesis: { id: 200, title: "Committee", status: t(200).status, student: { id: 9, firstName: "Student", lastName: "Test", email: "student@example.test" } } },
+        thesis: { id: 200, title: "Committee", status: t(200).status, student: { id: 9, firstName: "Student", lastName: "Test", email: "student@example.test" } },
+        members: db.committee.members.map((member) => ({ role: member.role, member: { user: { firstName: "Member", lastName: String(member.committeeMemberId) } } })) },
     })) || [],
   },
   evaluation: {
     create: async ({ data }) => { if (db.evaluations.some((e) => e.thesisId === data.thesisId && e.committeeMemberId === data.committeeMemberId)) { const error = new Error(); error.code = "P2002"; throw error; } const row = { id: 900 + db.evaluations.length, ...data, evaluationDate: new Date() }; db.evaluations.push(row); return row; },
-    findMany: async ({ where }) => db.evaluations.filter((e) => (!where.thesisId || e.thesisId === where.thesisId) && (!where.committeeMemberId || (typeof where.committeeMemberId === "object" ? where.committeeMemberId.in.includes(e.committeeMemberId) : e.committeeMemberId === where.committeeMemberId))),
+    findMany: async ({ where }) => db.evaluations.filter((e) => (!where.thesisId || (typeof where.thesisId === "object" ? where.thesisId.in.includes(e.thesisId) : e.thesisId === where.thesisId)) && (!where.committeeMemberId || (typeof where.committeeMemberId === "object" ? where.committeeMemberId.in.includes(e.committeeMemberId) : e.committeeMemberId === where.committeeMemberId))).map((e) => ({ ...e, committeeMember: { user: { id: e.committeeMemberId - 97 + 3, firstName: "Member", lastName: "Test" } } })),
   },
   feedback: {
     findFirst: async ({ where }) => db.feedback.find((f) => f.versionId === where.versionId) || null,
@@ -110,6 +124,67 @@ test("study programs are public and expose only active program identity", async 
   const result = await api("/api/study-programs");
   assert.equal(result.status, 200);
   assert.deepEqual(result.json, { success: true, programs: [{ id: 1, name: "Computer Science" }] });
+});
+
+test("admin directories require an active administrator and return safe account and program summaries", async () => {
+  for (const endpoint of ["/api/admin/users", "/api/admin/study-programs"]) {
+    assert.equal((await api(endpoint)).status, 401);
+    assert.equal((await api(endpoint, { id: 2 })).status, 403);
+  }
+  const users = await api("/api/admin/users", { id: 1 });
+  assert.equal(users.status, 200);
+  assert.equal(users.json.users[0].role.name, "ADMIN");
+  assert.equal(JSON.stringify(users.json).includes("passwordHash"), false);
+  const programs = await api("/api/admin/study-programs", { id: 1 });
+  assert.equal(programs.status, 200);
+  assert.deepEqual(programs.json.programs.map(({ name, status }) => [name, status]), [["Computer Science", "ACTIVE"], ["Inactive Program", "INACTIVE"]]);
+});
+
+test("admin dashboard is role-protected and calculates live summary data", async () => {
+  assert.equal((await api("/api/admin/dashboard")).status, 401);
+  assert.equal((await api("/api/admin/dashboard", { id: 2 })).status, 403);
+  const result = await api("/api/admin/dashboard", { id: 1 });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.dashboard.totalUsers, db.users.size);
+  assert.equal(result.json.dashboard.students, 4);
+  assert.equal(result.json.dashboard.studyPrograms, 2);
+  assert.equal(result.json.dashboard.activeTheses, 2);
+  assert.equal(result.json.dashboard.completedTheses, 0);
+  assert.equal(result.json.dashboard.upcomingDefenseCount, 0);
+  assert.ok(Array.isArray(result.json.dashboard.upcomingDefenses));
+});
+
+test("admin can create and edit programs, while non-admins cannot manage them", async () => {
+  assert.equal((await api("/api/admin/study-programs", { id: 2, method: "POST", body: { name: "New Program" } })).status, 403);
+  const created = await api("/api/admin/study-programs", { id: 1, method: "POST", body: { name: "New Program", department: "Science", degreeLevel: "Master" } });
+  assert.equal(created.status, 201);
+  const programId = created.json.program.id;
+  assert.equal((await api(`/api/admin/study-programs/${programId}`, { id: 1, method: "PATCH", body: { status: "INACTIVE" } })).json.program.status, "INACTIVE");
+  assert.equal((await api("/api/admin/study-programs", { id: 1, method: "POST", body: { name: "  " } })).status, 400);
+});
+
+test("admin can change account status without self-deactivation or non-admin access", async () => {
+  assert.equal((await api("/api/admin/users/2/status", { id: 2, method: "PATCH", body: { isActive: false } })).status, 403);
+  assert.equal((await api("/api/admin/users/1/status", { id: 1, method: "PATCH", body: { isActive: false } })).status, 400);
+  assert.equal((await api("/api/admin/users/2/status", { id: 1, method: "PATCH", body: { isActive: false } })).json.user.isActive, false);
+  assert.equal((await api("/api/admin/users/2/status", { id: 1, method: "PATCH", body: { isActive: true } })).json.user.isActive, true);
+});
+
+test("Committee dashboard returns assigned progress and names without any evaluation grades", async () => {
+  assert.equal((await api("/api/committee/dashboard")).status, 401);
+  assert.equal((await api("/api/committee/dashboard", { id: 2 })).status, 403);
+  await api("/api/committee/thesis/200", { id: 1, method: "POST", body: { members: [{ committeeMemberId: 101, role: "CHAIR" }, { committeeMemberId: 102, role: "MEMBER" }, { committeeMemberId: 103, role: "MEMBER" }] } });
+  await api("/api/committee/thesis/200/schedule", { id: 1, method: "PATCH", body: { defenseDate: new Date(Date.now() + 86400000).toISOString() } });
+  db.evaluations.push({ id: 1, thesisId: 200, committeeMemberId: 102, grade: 9, comments: "Private" });
+  const own = await api("/api/committee/dashboard", { id: 4 });
+  assert.equal(own.status, 200);
+  assert.equal(own.json.assignments[0].evaluationCount, 1);
+  assert.equal(own.json.assignments[0].evaluationSubmitted, false);
+  assert.equal(own.json.assignments[0].members.length, 3);
+  assert.equal(JSON.stringify(own.json).includes("grade"), false);
+  assert.equal(JSON.stringify(own.json).includes("Private"), false);
+  const evaluator = await api("/api/committee/dashboard", { id: 5 });
+  assert.equal(evaluator.json.assignments[0].evaluationSubmitted, true);
 });
 
 test("committee directory is admin-only and returns minimal active identities", async () => {
@@ -294,17 +369,61 @@ test("committee assignment requires three members and all assigned evaluations t
   let progress = (await admin("/api/committee/admin")).json.committees[0];
   assert.equal(progress.thesis.evaluations.length, 1);
   assert.equal(progress.status, "SCHEDULED");
+  assert.equal((await api(path + "/final-decision", { id: 4, method: "POST", body: { finalGrade: 9 } })).status, 409);
   assert.equal((await api(evalPath, { id: 4, method: "POST", body: { grade: 8 } })).status, 409);
   assert.equal((await api(evalPath, { id: 5, method: "POST", body: { grade: 8 } })).status, 201); assert.equal(db.committee.status, "SCHEDULED");
   progress = (await admin("/api/committee/admin")).json.committees[0];
   assert.equal(progress.thesis.evaluations.length, 2);
   assert.equal(progress.status, "SCHEDULED");
-  assert.equal((await api(evalPath, { id: 6, method: "POST", body: { grade: 10 } })).status, 201); assert.equal(db.committee.status, "COMPLETED");
+  assert.equal((await api(path + "/final-decision", { id: 4, method: "POST", body: { finalGrade: 9 } })).status, 409);
+  assert.equal((await api(evalPath, { id: 6, method: "POST", body: { grade: 10 } })).status, 201); assert.equal(db.committee.status, "SCHEDULED");
   progress = (await admin("/api/committee/admin")).json.committees[0];
   assert.equal(progress.thesis.evaluations.length, 3);
-  assert.equal(progress.status, "COMPLETED");
-  assert.equal(t(200).status, "COMPLETED");
+  assert.equal(progress.status, "SCHEDULED");
+  assert.equal(t(200).status, "SUBMITTED");
+  assert.equal((await api(path + "/final-decision", { id: 5, method: "POST", body: { finalGrade: 9, chairId: 4 } })).status, 403);
+  assert.equal((await api(path + "/final-decision", { id: 4, method: "POST", body: { finalGrade: 9 } })).status, 200);
+  assert.equal(db.committee.finalGrade, 9); assert.equal(db.committee.status, "COMPLETED"); assert.equal(t(200).status, "COMPLETED");
   assert.equal((await admin(path + "/schedule", "PATCH", { defenseDate: new Date(Date.now() + 86400000).toISOString() })).status, 409);
+});
+
+test("final decision requires all three evaluations and a Chair decision; agreement and disagreement never average", async () => {
+  const path = "/api/committee/thesis/200", evaluationPath = path + "/evaluations", decisionPath = path + "/final-decision";
+  await api(path, { id: 1, method: "POST", body: { members: [{ committeeMemberId: 101, role: "CHAIR" }, { committeeMemberId: 102, role: "MEMBER" }, { committeeMemberId: 103, role: "MEMBER" }] } });
+  await api(path + "/schedule", { id: 1, method: "PATCH", body: { defenseDate: new Date(Date.now() + 86400000).toISOString() } });
+  db.committee.defenseDate = new Date(Date.now() - 1000);
+  assert.equal((await api(decisionPath, { id: 4, method: "POST", body: { finalGrade: 9 } })).status, 409);
+  assert.equal((await api(decisionPath, { id: 2, method: "POST", body: { finalGrade: 9 } })).status, 403);
+  for (const [id, grade] of [[4, 10], [5, 9], [6, 8]]) assert.equal((await api(evaluationPath, { id, method: "POST", body: { grade } })).status, 201);
+  assert.equal(db.committee.status, "SCHEDULED"); assert.equal(t(200).status, "SUBMITTED");
+  const chairAssignments = await api("/api/committee/my", { id: 4 });
+  assert.equal(chairAssignments.json.assignments[0].evaluationCount, 3);
+  assert.equal(chairAssignments.json.assignments[0].gradesAgree, false);
+  assert.equal(chairAssignments.json.assignments[0].committeeEvaluations.length, 3);
+  const memberAssignments = await api("/api/committee/my", { id: 5 });
+  assert.equal(memberAssignments.json.assignments[0].committeeEvaluations, undefined);
+  assert.equal((await api(decisionPath, { id: 4, method: "POST", body: { finalGrade: 5 } })).status, 400);
+  assert.equal((await api(decisionPath, { id: 4, method: "POST", body: { finalGrade: 11 } })).status, 400);
+  assert.equal((await api(decisionPath, { id: 4, method: "POST", body: { finalGrade: 9.999 } })).status, 400);
+  assert.equal((await api(decisionPath, { id: 4, method: "POST", body: { finalGrade: 9, userId: 5, chairId: 5 } })).status, 200);
+  assert.equal(db.committee.finalGrade, 9); assert.equal(db.committee.status, "COMPLETED"); assert.equal(t(200).status, "COMPLETED");
+});
+
+test("unanimous evaluation can only be confirmed at the agreed grade", async () => {
+  const path = "/api/committee/thesis/200";
+  for (const grade of [6, 7, 8, 9, 10]) {
+    db = setup();
+    await api(path, { id: 1, method: "POST", body: { members: [{ committeeMemberId: 101, role: "CHAIR" }, { committeeMemberId: 102, role: "MEMBER" }, { committeeMemberId: 103, role: "MEMBER" }] } });
+    await api(path + "/schedule", { id: 1, method: "PATCH", body: { defenseDate: new Date(Date.now() + 86400000).toISOString() } });
+    db.committee.defenseDate = new Date(Date.now() - 1000);
+    for (const id of [4, 5, 6]) await api(path + "/evaluations", { id, method: "POST", body: { grade } });
+    if (grade === 6) {
+      assert.equal((await api(path + "/final-decision", { id: 4, method: "POST", body: { finalGrade: 8 } })).status, 400);
+      assert.equal(db.committee.status, "SCHEDULED");
+    }
+    assert.equal((await api(path + "/final-decision", { id: 4, method: "POST", body: { finalGrade: grade } })).status, 200);
+    assert.equal(db.committee.finalGrade, grade);
+  }
 });
 
 test("students can cancel only their own pending mentor request", async () => {

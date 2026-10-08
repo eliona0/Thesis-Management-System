@@ -18,6 +18,10 @@ import MentorStudents from '../pages/mentor/Students'
 import MentorFeedback from '../pages/mentor/Feedback'
 import AdminCommittees from '../pages/admin/Committees'
 import CommitteeEvaluations from '../pages/committee/Evaluations'
+import CommitteeDashboard from '../pages/committee/CommitteeDashboard'
+import AdminDashboard from '../pages/admin/AdminDashboard'
+import AdminUsers from '../pages/admin/Users'
+import AdminPrograms from '../pages/admin/Programs'
 
 function LoadingScreen() {
   return <div className="screen-state" role="status"><span className="spinner" />Checking your session…</div>
@@ -55,22 +59,6 @@ function AccessDenied() {
   )
 }
 
-function FoundationPage({ title }) {
-  return (
-    <section className="page-heading">
-      <span className="eyebrow">Thesis Management System</span>
-      <h1>{title}</h1>
-      <p>This section is ready for its feature implementation.</p>
-    </section>
-  )
-}
-
-function RoleLanding() {
-  const { user } = useAuth()
-  const names = { STUDENT: 'Student', MENTOR: 'Mentor', ADMIN: 'Admin', COMMITTEE_MEMBER: 'Committee' }
-  return <FoundationPage title={`${names[user?.role] || 'Account'} dashboard`} />
-}
-
 export default function AppRoutes() {
   return (
     <Routes>
@@ -103,14 +91,14 @@ export default function AppRoutes() {
           </Route>
           <Route path="/admin" element={<RequireRole role="ADMIN" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<RoleLanding />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="committees" element={<AdminCommittees />} />
-            <Route path="users" element={<FoundationPage title="Users" />} />
-            <Route path="programs" element={<FoundationPage title="Programs" />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="programs" element={<AdminPrograms />} />
           </Route>
           <Route path="/committee" element={<RequireRole role="COMMITTEE_MEMBER" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<RoleLanding />} />
+            <Route path="dashboard" element={<CommitteeDashboard />} />
             <Route path="evaluations" element={<CommitteeEvaluations />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

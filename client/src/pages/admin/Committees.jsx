@@ -128,7 +128,8 @@ export default function Committees() {
           <dl className="student-detail-list">
             <div><dt>Research field</dt><dd>{thesis.researchField || 'Not provided'}</dd></div>
             <div><dt>Thesis status</dt><dd>{displayStatus(thesis.status)}</dd></div>
-            <div><dt>Evaluation progress</dt><dd>{evaluations.length} of {committee.members?.length || 0} submitted{committee.status === 'COMPLETED' ? ' — Committee evaluation complete' : ''}</dd></div>
+            <div><dt>Evaluation progress</dt><dd>{evaluations.length} of {committee.members?.length || 0} submitted{committee.status === 'COMPLETED' ? ' — Final decision confirmed' : evaluations.length === 3 ? ' — Awaiting Chair final decision' : ''}</dd></div>
+            {committee.finalGrade != null && <div><dt>Committee final grade</dt><dd>{committee.finalGrade}</dd></div>}
             {committee.defenseDate && <div><dt>Defense date</dt><dd>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(committee.defenseDate))}</dd></div>}
           </dl>
           <h3>Committee Members</h3>

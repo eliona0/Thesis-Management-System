@@ -11,6 +11,7 @@ const mentorRoutes = require("./routes/mentor/mentor.routes");
 const thesisRoutes = require("./routes/thesis/thesis.routes");
 const feedbackRoutes = require("./routes/feedback/feedback.routes");
 const committeeRoutes = require("./routes/committee/committee.routes");
+const adminRoutes = require("./routes/admin.routes");
 const { getActiveStudyPrograms } = require("./controllers/studyProgram.controller");
 const { authenticate } = require("./middleware/auth.middleware");
 const { authorizeThesisFile } = require("./middleware/thesis-file.middleware");
@@ -60,6 +61,7 @@ app.use("/api/mentor", mentorRoutes);
 app.use("/api/thesis", thesisRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/committee", committeeRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);

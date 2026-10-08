@@ -56,6 +56,25 @@ export default function Evaluations() {
     }
   }
 
+  const submitFinalDecision = async (event, assignment) => {
+    event.preventDefault()
+    if (savingId !== null) return
+    const grade = assignment.gradesAgree ? assignment.agreedGrade : Number(drafts[assignment.thesis.id]?.finalGrade)
+    setSavingId(assignment.thesis.id)
+    setError('')
+    setNotice('')
+    try {
+      await api.post(`/committee/thesis/${assignment.thesis.id}/final-decision`, { finalGrade: grade })
+      setNotice('The Committee final grade has been confirmed.')
+      await loadAssignments(false)
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Unable to confirm the final decision.'))
+      if ([400, 404, 409].includes(requestError.response?.status)) await loadAssignments(false)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   return <div className="mentor-request-page">
     <header className="page-heading"><span className="eyebrow">Committee workspace</span><h1>Evaluations</h1><p>Review theses assigned to you and submit one grade and comment for each scheduled defense.</p></header>
     {error && <div className="notice error" role="alert">{error}</div>}
@@ -79,6 +98,7 @@ export default function Evaluations() {
                 <div><dt>Committee role</dt><dd>{assignment.member?.role === 'CHAIR' ? 'Chair' : 'Member'}</dd></div>
                 <div><dt>Defense date</dt><dd>{formatDate(committee.defenseDate)}</dd></div>
                 <div><dt>Research field</dt><dd>{thesis.researchField || 'Not provided'}</dd></div>
+                <div><dt>Evaluations</dt><dd>{assignment.evaluationCount || (evaluation ? 1 : 0)}/3</dd></div>
               </dl>
               <section className="version-feedback"><span className="eyebrow">Thesis information</span><p>{thesis.description || 'No thesis description provided.'}</p></section>
               {evaluation ? <section className="version-feedback" aria-label="Your submitted evaluation"><span className="eyebrow">Your submitted evaluation</span><p><strong>Grade: {evaluation.grade}</strong></p><p>{evaluation.comments || 'No comments provided.'}</p><small>{formatDate(evaluation.evaluationDate)}</small></section>
@@ -90,6 +110,14 @@ export default function Evaluations() {
                   <textarea id={`comments-${thesis.id}`} rows="4" maxLength="10000" value={draft.comments || ''} onChange={(event) => updateDraft(thesis.id, 'comments', event.target.value)} placeholder="Add your evaluation comments" />
                   <div className="thesis-form-actions"><button className="button button-primary" type="submit" disabled={savingId !== null}>{savingId === thesis.id ? 'Submitting…' : 'Submit evaluation'}</button></div>
                 </form> : <p className="mentor-thesis-status-note">Evaluation is unavailable for this Committee.</p>}
+              {committee.status === 'COMPLETED' && <section className="version-feedback"><span className="eyebrow">Final decision</span><p>Final grade: <strong>{committee.finalGrade}</strong></p></section>}
+              {assignment.member?.role === 'CHAIR' && committee.status === 'SCHEDULED' && assignment.evaluationCount === 3 && assignment.committeeEvaluations && <section className="version-feedback">
+                <span className="eyebrow">Committee evaluations</span>
+                {assignment.committeeEvaluations.map((item) => <p key={item.id}>{fullName(item.committeeMember?.user)} — Grade {item.grade}</p>)}
+                <h3>Final decision</h3>
+                {assignment.gradesAgree ? <><p>All committee members agree. Confirm the agreed grade {assignment.agreedGrade}.</p></> : <><p>Committee members have different evaluations. Chair must determine the final grade.</p><label htmlFor={`final-grade-${thesis.id}`}>Final grade (6–10)</label><input id={`final-grade-${thesis.id}`} type="number" min="6" max="10" step="0.01" required value={draft.finalGrade || ''} onChange={(event) => updateDraft(thesis.id, 'finalGrade', event.target.value)} /></>}
+                <button className="button button-primary" type="button" onClick={(event) => submitFinalDecision(event, assignment)} disabled={savingId !== null}>{savingId === thesis.id ? 'Confirming…' : 'Confirm final grade'}</button>
+              </section>}
             </article>
           })}</div>}
     </section>
