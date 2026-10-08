@@ -4,6 +4,8 @@ const {
   assignCommittee,
   getCommittee,
   getCommitteeMembers,
+  getEligibleTheses,
+  getAdminCommittees,
   getMyCommittees,
   scheduleDefense,
   createEvaluation,
@@ -15,6 +17,8 @@ const { requireRole } = require("../../middleware/role.middleware");
 const router = express.Router();
 
 router.get("/members", authenticate, requireRole("ADMIN"), getCommitteeMembers);
+router.get("/eligible-theses", authenticate, requireRole("ADMIN"), getEligibleTheses);
+router.get("/admin", authenticate, requireRole("ADMIN"), getAdminCommittees);
 router.get("/my", authenticate, requireRole("COMMITTEE_MEMBER"), getMyCommittees);
 
 router.post(

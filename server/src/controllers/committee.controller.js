@@ -226,6 +226,26 @@ const getCommitteeMembers = async (req, res) => {
   }
 };
 
+const getEligibleTheses = async (req, res) => {
+  try {
+    const theses = await committeeService.getEligibleTheses();
+    return res.status(200).json({ success: true, theses });
+  } catch (error) {
+    console.error("Get eligible committee theses error:", error);
+    return res.status(500).json({ success: false, message: "Unable to load eligible theses" });
+  }
+};
+
+const getAdminCommittees = async (req, res) => {
+  try {
+    const committees = await committeeService.getAdminCommittees();
+    return res.status(200).json({ success: true, committees });
+  } catch (error) {
+    console.error("Get admin committees error:", error);
+    return res.status(500).json({ success: false, message: "Unable to load committees" });
+  }
+};
+
 const getMyCommittees = async (req, res) => {
   try {
     const assignments = await committeeService.getMyCommittees(req.user.userId);
@@ -258,6 +278,7 @@ const createEvaluation = async (req, res) => {
       COMMITTEE_MEMBER_NOT_FOUND: [404, "Committee member profile not found"],
       COMMITTEE_NOT_FOUND: [404, "Committee not found for this thesis"],
       COMMITTEE_NOT_SCHEDULED: [409, "Only scheduled committees can receive evaluations"],
+      DEFENSE_DATE_NOT_REACHED: [409, "Evaluations are available on or after the defense date"],
       UNAUTHORIZED_COMMITTEE_MEMBER: [403, "You are not assigned to this committee"],
       EVALUATION_ALREADY_EXISTS: [409, "You have already evaluated this thesis"],
       COMMITTEE_INVALID_TRANSITION: [409, "Committee cannot be completed in its current state"],
@@ -274,6 +295,8 @@ module.exports = {
   assignCommittee,
   getCommittee,
   getCommitteeMembers,
+  getEligibleTheses,
+  getAdminCommittees,
   getMyCommittees,
   scheduleDefense,
   createEvaluation,

@@ -102,6 +102,15 @@ const getCommittee = async (thesisId) => {
   const committee = await prisma.committee.findUnique({
     where: { thesisId: normalizedThesisId },
     include: {
+      thesis: {
+        select: {
+          id: true, title: true, description: true, researchField: true, status: true,
+          student: { select: { id: true, firstName: true, lastName: true, email: true } },
+          evaluations: {
+            include: { committeeMember: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } } } },
+          },
+        },
+      },
       members: {
         orderBy: { role: "asc" },
         include: memberInclude,
@@ -111,6 +120,31 @@ const getCommittee = async (thesisId) => {
   if (!committee) throw new Error("COMMITTEE_NOT_FOUND");
   return committee;
 };
+
+const getEligibleTheses = async () => prisma.thesis.findMany({
+  where: { status: "SUBMITTED", committee: { is: null } },
+  orderBy: { updatedAt: "desc" },
+  select: {
+    id: true, title: true, description: true, researchField: true, status: true, updatedAt: true,
+    student: { select: { id: true, firstName: true, lastName: true, email: true } },
+  },
+});
+
+const getAdminCommittees = async () => prisma.committee.findMany({
+  orderBy: { assignedDate: "desc" },
+  include: {
+    thesis: {
+      select: {
+        id: true, title: true, description: true, researchField: true, status: true,
+        student: { select: { id: true, firstName: true, lastName: true, email: true } },
+        evaluations: {
+          include: { committeeMember: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } } } },
+        },
+      },
+    },
+    members: { orderBy: { role: "asc" }, include: memberInclude },
+  },
+});
 
 const getCommitteeMembers = async () => {
   const profiles = await prisma.committeeMemberProfile.findMany({
@@ -148,7 +182,7 @@ const getMyCommittees = async (userId) => {
           id: true, status: true, defenseDate: true,
           thesis: {
             select: {
-              id: true, title: true, status: true,
+              id: true, title: true, description: true, researchField: true, status: true,
               student: { select: { id: true, firstName: true, lastName: true, email: true } },
             },
           },
@@ -206,7 +240,8 @@ const createEvaluation = async ({ committeeMemberUserId, thesisId, grade, commen
     throw new Error("INVALID_THESIS_ID");
   }
   if (grade === undefined || grade === null || grade === "" ||
-      !Number.isFinite(numericGrade) || numericGrade < 6 || numericGrade > 10) {
+      !Number.isFinite(numericGrade) || numericGrade < 6 || numericGrade > 10 ||
+      Math.abs(numericGrade * 100 - Math.round(numericGrade * 100)) > 1e-8) {
     throw new Error("INVALID_GRADE");
   }
   if (comments !== undefined && comments !== null && typeof comments !== "string") {
@@ -225,6 +260,9 @@ const createEvaluation = async ({ committeeMemberUserId, thesisId, grade, commen
   });
   if (!committee) throw new Error("COMMITTEE_NOT_FOUND");
   if (committee.status !== "SCHEDULED") throw new Error("COMMITTEE_NOT_SCHEDULED");
+  if (!committee.defenseDate || new Date(committee.defenseDate) > new Date()) {
+    throw new Error("DEFENSE_DATE_NOT_REACHED");
+  }
   const assignedMember = committee.members.find(
     (member) => member.committeeMemberId === profile.id
   );
@@ -255,16 +293,21 @@ const createEvaluation = async ({ committeeMemberUserId, thesisId, grade, commen
         },
       });
 
+      const assignedMemberIds = committee.members.map((member) => member.committeeMemberId);
       const evaluations = await tx.evaluation.findMany({
-        where: { thesisId: normalizedThesisId },
+        where: { thesisId: normalizedThesisId, committeeMemberId: { in: assignedMemberIds } },
         select: { id: true },
       });
-      if (evaluations.length === committee.members.length) {
+      if (assignedMemberIds.length === 3 && evaluations.length === assignedMemberIds.length) {
         const completed = await tx.committee.updateMany({
           where: { id: committee.id, status: "SCHEDULED" },
           data: { status: "COMPLETED" },
         });
         if (completed.count !== 1) throw new Error("COMMITTEE_INVALID_TRANSITION");
+        await tx.thesis.updateMany({
+          where: { id: normalizedThesisId, status: "SUBMITTED" },
+          data: { status: "COMPLETED" },
+        });
       }
       return { evaluation, committeeStatus: evaluations.length === committee.members.length ? "COMPLETED" : "SCHEDULED" };
     });
@@ -277,6 +320,8 @@ const createEvaluation = async ({ committeeMemberUserId, thesisId, grade, commen
 module.exports = {
   assignCommittee,
   getCommittee,
+  getEligibleTheses,
+  getAdminCommittees,
   getCommitteeMembers,
   getMyCommittees,
   scheduleDefense,

@@ -16,6 +16,8 @@ import MentorTheses from '../pages/mentor/Theses'
 import MentorVersions from '../pages/mentor/Versions'
 import MentorStudents from '../pages/mentor/Students'
 import MentorFeedback from '../pages/mentor/Feedback'
+import AdminCommittees from '../pages/admin/Committees'
+import CommitteeEvaluations from '../pages/committee/Evaluations'
 
 function LoadingScreen() {
   return <div className="screen-state" role="status"><span className="spinner" />Checking your session…</div>
@@ -102,14 +104,14 @@ export default function AppRoutes() {
           <Route path="/admin" element={<RequireRole role="ADMIN" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<RoleLanding />} />
-            <Route path="committees" element={<FoundationPage title="Committees" />} />
+            <Route path="committees" element={<AdminCommittees />} />
             <Route path="users" element={<FoundationPage title="Users" />} />
             <Route path="programs" element={<FoundationPage title="Programs" />} />
           </Route>
           <Route path="/committee" element={<RequireRole role="COMMITTEE_MEMBER" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<RoleLanding />} />
-            <Route path="evaluations" element={<FoundationPage title="Evaluations" />} />
+            <Route path="evaluations" element={<CommitteeEvaluations />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
