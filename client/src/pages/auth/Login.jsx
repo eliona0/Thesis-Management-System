@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Button from '../../components/Button'
 import useAuth from '../../context/useAuth'
 import { getApiErrorMessage } from '../../services/api'
@@ -40,7 +40,8 @@ export default function Login() {
       <form className="form-stack" onSubmit={handleSubmit}>
         <label className="field">
           <span>Email address</span>
-          <input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required placeholder="name@university.edu" />
+          <input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required placeholder="ab12345@ubt-uni.net" />
+          <small>Enter your institutional UBT email address.</small>
         </label>
         <label className="field">
           <span>Password</span>
@@ -48,7 +49,6 @@ export default function Login() {
         </label>
         <Button type="submit" loading={loading} className="button-primary button-full">Sign in</Button>
       </form>
-      <p className="auth-switch">New student? <Link to="/register">Create an account</Link></p>
     </div>
   )
 }

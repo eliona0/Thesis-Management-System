@@ -12,6 +12,31 @@ const getUsers = () => prisma.user.findMany({
   orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
 });
 
+const createUser = async ({ firstName, lastName, email, password, roleName, studentNumber, studyProgramId, academicTitle, department, specialization }) => {
+  const bcrypt = require("bcrypt");
+  const role = await prisma.role.findUnique({ where: { name: roleName }, select: { id: true } });
+  if (!role) throw new Error("ROLE_NOT_FOUND");
+  if (roleName === "STUDENT") {
+    const program = await prisma.studyProgram.findUnique({ where: { id: studyProgramId }, select: { id: true, status: true } });
+    if (!program || program.status !== "ACTIVE") throw new Error("STUDY_PROGRAM_NOT_FOUND");
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
+  const profile = roleName === "STUDENT"
+    ? { studentProfile: { create: { studentNumber } } }
+    : roleName === "MENTOR"
+      ? { mentorProfile: { create: { academicTitle, department, specialization } } }
+      : roleName === "COMMITTEE_MEMBER"
+        ? { committeeMemberProfile: { create: { academicTitle, department, specialization } } }
+        : {};
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { firstName, lastName, email, passwordHash, roleId: role.id, ...(roleName === "STUDENT" ? { studyProgramId } : {}), ...profile },
+      select: { id: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true, role: { select: { name: true } }, studyProgram: { select: { name: true } }, studentProfile: { select: { studentNumber: true } }, mentorProfile: { select: { academicTitle: true, department: true, specialization: true, isAvailable: true } }, committeeMemberProfile: { select: { academicTitle: true, department: true, specialization: true } } },
+    });
+    return user;
+  });
+};
+
 const getStudyPrograms = () => prisma.studyProgram.findMany({
   select: {
     id: true, name: true, department: true, degreeLevel: true, status: true, createdAt: true,
@@ -64,4 +89,4 @@ const updateUserStatus = async (id, isActive) => {
   return prisma.user.update({ where: { id }, data: { isActive }, select: { id: true, isActive: true } });
 };
 
-module.exports = { getUsers, getStudyPrograms, getDashboard, createStudyProgram, updateStudyProgram, updateUserStatus };
+module.exports = { createUser, getUsers, getStudyPrograms, getDashboard, createStudyProgram, updateStudyProgram, updateUserStatus };

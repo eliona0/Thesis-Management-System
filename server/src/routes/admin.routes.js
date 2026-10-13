@@ -1,11 +1,12 @@
 const express = require("express");
-const { getUsers, getStudyPrograms, getDashboard, createStudyProgram, updateStudyProgram, updateUserStatus } = require("../controllers/admin.controller");
+const { createUser, getUsers, getStudyPrograms, getDashboard, createStudyProgram, updateStudyProgram, updateUserStatus } = require("../controllers/admin.controller");
 const { authenticate } = require("../middleware/auth.middleware");
 const { requireRole } = require("../middleware/role.middleware");
 
 const router = express.Router();
 router.use(authenticate, requireRole("ADMIN"));
 router.get("/users", getUsers);
+router.post("/users", createUser);
 router.patch("/users/:userId/status", updateUserStatus);
 router.get("/dashboard", getDashboard);
 router.get("/study-programs", getStudyPrograms);

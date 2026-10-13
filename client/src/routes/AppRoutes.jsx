@@ -3,7 +3,6 @@ import useAuth from '../context/useAuth'
 import AuthLayout from '../layouts/AuthLayout'
 import DashboardLayout from '../layouts/DashboardLayout'
 import Login from '../pages/auth/Login'
-import Register from '../pages/auth/Register'
 import { roleHomePath } from './rolePaths'
 import StudentDashboard from '../pages/student/StudentDashboard'
 import Profile from '../pages/student/Profile'
@@ -65,7 +64,7 @@ export default function AppRoutes() {
       <Route element={<RequireGuest />}>
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/register" element={<Navigate to="/login" replace />} />
         </Route>
       </Route>
       <Route element={<RequireAuth />}>

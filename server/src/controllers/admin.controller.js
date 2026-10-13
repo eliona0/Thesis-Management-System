@@ -1,5 +1,42 @@
 const adminService = require("../services/admin.service");
 
+const createUser = async (req, res) => {
+  const body = req.body || {};
+  const roleName = body.role;
+  const roles = ["STUDENT", "MENTOR", "COMMITTEE_MEMBER", "ADMIN"];
+  const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
+  const lastName = typeof body.lastName === "string" ? body.lastName.trim() : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const password = body.password;
+  if (!firstName || firstName.length > 100 || !lastName || lastName.length > 100 || !roles.includes(roleName)
+      || !/^[^\s@]+@ubt-uni\.net$/i.test(email) || typeof password !== "string" || password.length < 8 || password.length > 128) {
+    return res.status(400).json({ success: false, message: "Enter valid names, a @ubt-uni.net email, a password of at least 8 characters, and a supported role" });
+  }
+  let studentNumber;
+  let studyProgramId;
+  const optionalText = (value, max) => value == null || value === "" ? null : typeof value === "string" && value.trim().length <= max ? value.trim() : undefined;
+  const academicTitle = optionalText(body.academicTitle, 100);
+  const department = optionalText(body.department, 150);
+  const specialization = optionalText(body.specialization, 10000);
+  if (academicTitle === undefined || department === undefined || specialization === undefined) return res.status(400).json({ success: false, message: "Enter valid profile information" });
+  if (["MENTOR", "COMMITTEE_MEMBER"].includes(roleName) && (!academicTitle || !department)) return res.status(400).json({ success: false, message: "Academic title and department are required for this role" });
+  if (roleName === "STUDENT") {
+    studentNumber = typeof body.studentNumber === "string" ? body.studentNumber.trim() : "";
+    studyProgramId = Number(body.studyProgramId);
+    if (!studentNumber || studentNumber.length > 50 || !Number.isSafeInteger(studyProgramId) || studyProgramId <= 0) return res.status(400).json({ success: false, message: "Student number and study program are required" });
+  }
+  try {
+    const user = await adminService.createUser({ firstName, lastName, email, password, roleName, studentNumber, studyProgramId, academicTitle, department, specialization });
+    return res.status(201).json({ success: true, message: "User created successfully", user });
+  } catch (error) {
+    if (error.code === "P2002") return res.status(409).json({ success: false, message: "Email or student number already exists" });
+    if (error.message === "STUDY_PROGRAM_NOT_FOUND") return res.status(400).json({ success: false, message: "Choose an active study program" });
+    if (error.message === "ROLE_NOT_FOUND") return res.status(400).json({ success: false, message: "The selected role is unavailable" });
+    console.error("Create admin user error:", error);
+    return res.status(500).json({ success: false, message: "Unable to create user" });
+  }
+};
+
 const getUsers = async (req, res) => {
   try {
     const users = await adminService.getUsers();
@@ -99,4 +136,4 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
-module.exports = { getUsers, getStudyPrograms, getDashboard, createStudyProgram, updateStudyProgram, updateUserStatus };
+module.exports = { createUser, getUsers, getStudyPrograms, getDashboard, createStudyProgram, updateStudyProgram, updateUserStatus };

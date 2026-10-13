@@ -1,12 +1,13 @@
 import { Link, Outlet } from 'react-router-dom'
+import BrandMark from '../components/BrandMark'
 
 export default function AuthLayout() {
   return (
     <main className="auth-shell">
       <section className="auth-intro">
         <Link className="brand-lockup" to="/login" aria-label="Thesis Management System home">
-          <span className="brand-mark">T</span>
-          <span>Thesis Management System</span>
+          <BrandMark />
+          <span>UBT - Thesis Management System</span>
         </Link>
         <div className="auth-message">
           <span className="eyebrow">University workspace</span>
