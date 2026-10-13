@@ -492,6 +492,87 @@ async function main() {
 
   console.log("Test mentor seeded successfully.");
 
+  
+  // =====================================================
+  // ADDITIONAL TEST MENTORS
+  // =====================================================
+
+  const additionalMentors = [
+    {
+      email: "test.mentor2@example.com",
+      firstName: "Ardian",
+      lastName: "Krasniqi",
+      academicTitle: "Prof. Ass.",
+      specialization: "Artificial Intelligence",
+      department: "Computer Science and Engineering",
+    },
+    {
+      email: "test.mentor3@example.com",
+      firstName: "Mira",
+      lastName: "Berisha",
+      academicTitle: "Dr.",
+      specialization: "Software Engineering",
+      department: "Computer Science and Engineering",
+    },
+    {
+      email: "test.mentor4@example.com",
+      firstName: "Besnik",
+      lastName: "Gashi",
+      academicTitle: "Prof. Dr.",
+      specialization: "Computer Networks",
+      department: "Computer Science and Engineering",
+    },
+    {
+      email: "test.mentor5@example.com",
+      firstName: "Vlora",
+      lastName: "Hoxha",
+      academicTitle: "Dr.",
+      specialization: "Database Systems",
+      department: "Computer Science and Engineering",
+    },
+  ];
+
+  for (const mentor of additionalMentors) {
+    const user = await prisma.user.upsert({
+      where: { email: mentor.email },
+      update: {
+        roleId: mentorRole.id,
+        studyProgramId: mentorStudyProgram.id,
+        firstName: mentor.firstName,
+        lastName: mentor.lastName,
+        isActive: true,
+      },
+      create: {
+        roleId: mentorRole.id,
+        studyProgramId: mentorStudyProgram.id,
+        firstName: mentor.firstName,
+        lastName: mentor.lastName,
+        email: mentor.email,
+        passwordHash: mentorPasswordHash,
+      },
+    });
+
+    await prisma.mentorProfile.upsert({
+      where: { userId: user.id },
+      update: {
+        academicTitle: mentor.academicTitle,
+        specialization: mentor.specialization,
+        department: mentor.department,
+        isAvailable: true,
+      },
+      create: {
+        userId: user.id,
+        academicTitle: mentor.academicTitle,
+        specialization: mentor.specialization,
+        department: mentor.department,
+        isAvailable: true,
+      },
+    });
+  }
+
+  console.log("Additional test mentors seeded successfully.");
+
+
     // =====================================================
   // TEST ADMIN
   // =====================================================
@@ -569,6 +650,22 @@ async function main() {
       specialization: "Computer Networks",
       department: "Computer Science and Engineering",
     },
+    {
+  email: "test.member3@example.com",
+  firstName: "Alban",
+  lastName: "Rexha",
+  academicTitle: "Dr.",
+  specialization: "Cybersecurity",
+  department: "Computer Science and Engineering",
+},
+{
+  email: "test.member4@example.com",
+  firstName: "Elira",
+  lastName: "Morina",
+  academicTitle: "Prof. Ass.",
+  specialization: "Data Science",
+  department: "Computer Science and Engineering",
+},
   ];
 
   const committeePasswordHash = await bcrypt.hash(
@@ -615,6 +712,94 @@ async function main() {
   }
 
   console.log("Test committee members seeded successfully.");
+
+  
+  // =====================================================
+  // TEST STUDENTS
+  // =====================================================
+
+  const studentRole = await prisma.role.findUnique({
+    where: { name: "STUDENT" },
+  });
+
+  if (!studentRole) {
+    throw new Error("STUDENT role not found.");
+  }
+
+  const studentProgram = await prisma.studyProgram.findFirst({
+    where: {
+      name: "Computer Science and Engineering",
+      degreeLevel: "Bachelor",
+      status: "ACTIVE",
+    },
+  });
+
+  if (!studentProgram) {
+    throw new Error("Active Bachelor study program not found.");
+  }
+
+  const studentPasswordHash = await bcrypt.hash(
+    "Student1234!",
+    10
+  );
+
+  const students = [
+    { firstName: "Arta", lastName: "Berisha", number: "TEST-STU-001", year: 3 },
+    { firstName: "Luan", lastName: "Krasniqi", number: "TEST-STU-002", year: 3 },
+    { firstName: "Diona", lastName: "Gashi", number: "TEST-STU-003", year: 2 },
+    { firstName: "Erion", lastName: "Hoxha", number: "TEST-STU-004", year: 4 },
+    { firstName: "Learta", lastName: "Shala", number: "TEST-STU-005", year: 3 },
+    { firstName: "Arben", lastName: "Rexha", number: "TEST-STU-006", year: 2 },
+    { firstName: "Era", lastName: "Morina", number: "TEST-STU-007", year: 1 },
+    { firstName: "Dren", lastName: "Bytyqi", number: "TEST-STU-008", year: 4 },
+    { firstName: "Rina", lastName: "Kelmendi", number: "TEST-STU-009", year: 3 },
+    { firstName: "Blerim", lastName: "Tahiri", number: "TEST-STU-010", year: 2 },
+  ];
+
+  for (const student of students) {
+    const email = `${student.number.toLowerCase()}@example.com`;
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {
+        roleId: studentRole.id,
+        studyProgramId: studentProgram.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        isActive: true,
+      },
+      create: {
+        roleId: studentRole.id,
+        studyProgramId: studentProgram.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        email,
+        passwordHash: studentPasswordHash,
+      },
+    });
+
+    await prisma.studentProfile.upsert({
+      where: { userId: user.id },
+      update: {
+        studentNumber: student.number,
+        studyYear: student.year,
+        earnedCredits: student.year * 30,
+        verificationStatus: "PENDING",
+        phone: null,
+      },
+      create: {
+        userId: user.id,
+        studentNumber: student.number,
+        studyYear: student.year,
+        earnedCredits: student.year * 30,
+        verificationStatus: "PENDING",
+        phone: null,
+      },
+    });
+  }
+
+  console.log("10 test students seeded successfully.");
+
 
   console.log("Database seed completed successfully.");
 }

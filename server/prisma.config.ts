@@ -6,6 +6,7 @@ export default defineConfig({
 
   migrations: {
     path: "prisma/migrations",
+    seed: "node seed.js",
   },
 
   datasource: {
