@@ -4,7 +4,12 @@ const getUsers = () => prisma.user.findMany({
   select: {
     id: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true,
     role: { select: { name: true } },
-    studyProgram: { select: { name: true } },
+    studyProgram: {
+  select: {
+    name: true,
+    degreeLevel: true,
+  },
+},
     studentProfile: { select: { studentNumber: true, studyYear: true, verificationStatus: true } },
     mentorProfile: { select: { academicTitle: true, department: true, isAvailable: true } },
     committeeMemberProfile: { select: { academicTitle: true, department: true } },
@@ -31,7 +36,12 @@ const createUser = async ({ firstName, lastName, email, password, roleName, stud
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: { firstName, lastName, email, passwordHash, roleId: role.id, ...(roleName === "STUDENT" ? { studyProgramId } : {}), ...profile },
-      select: { id: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true, role: { select: { name: true } }, studyProgram: { select: { name: true } }, studentProfile: { select: { studentNumber: true } }, mentorProfile: { select: { academicTitle: true, department: true, specialization: true, isAvailable: true } }, committeeMemberProfile: { select: { academicTitle: true, department: true, specialization: true } } },
+      select: { id: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true, role: { select: { name: true } }, studyProgram: {
+  select: {
+    name: true,
+    degreeLevel: true,
+  },
+}, studentProfile: { select: { studentNumber: true } }, mentorProfile: { select: { academicTitle: true, department: true, specialization: true, isAvailable: true } }, committeeMemberProfile: { select: { academicTitle: true, department: true, specialization: true } } },
     });
     return user;
   });
